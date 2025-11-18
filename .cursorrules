@@ -1,0 +1,107 @@
+## 核心原则
+- 目标：实现沉浸式视频流 App，但更重要的是以架构、性能、交互和 AI 融合展示团队级工程能力，让评审一眼看到技术深度。
+- **文档优先**：开始任何任务前必须先阅读并对齐以下文档——`README.md`、`docs/getting_started.md`、`docs/architecture.md`、`docs/development_plan.md`、`docs/api_reference.md`。
+- 所有改动需要明确技术亮点及可量化指标（含基准数据、Profiler 截图、视频播放性能数据）。
+
+## 工作流（文档驱动）
+- 需求 -> 技术方案 -> 开发 -> 测试 -> 文档更新，链路不可缺失。
+- **任务开始前**：确认任务已记录在 `docs/development_plan.md`，理解其在整体架构中的位置，并补充必要的需求/方案描述。
+- **开发过程中**：遵循模块化设计，保持与既有代码一致的风格与架构边界，必要时让 Cursor 生成/校验模板代码。
+- **任务完成后**：
+  - 在 `docs/development_plan.md` 中将对应条目标记为 `[x]`，补充完成日期与简述。
+  - 若触达架构/接口/核心流程，分别更新 `docs/architecture.md`、`docs/api_reference.md`、工作流/进度文档。
+  - 记录可量化效果（播放成功率、首帧耗时、卡顿率、内存占用峰值、FPS、冷启动等）并附证据。
+
+## 需求跟踪机制
+- 任何需求、Bug、技术债都必须先写入 `docs/development_plan.md`；未登记的禁止开工。
+- 完成后在清单前标记 `[x]` 并写上 `YYYY-MM-DD - done by XXX`。
+- 重大变更需同步 `docs/architecture.md` 与 PR 描述，保证历史可追溯。
+
+## 架构准则
+- 强制执行模块化 + MVVM + Clean Architecture：
+  - Presentation：Jetpack ViewModel、LiveData/StateFlow、Navigation，配合 BaseActivity/BaseFragment/BaseViewModel。
+  - Domain：UseCase + Repository 接口，纯 Kotlin、可测试。
+  - Data：Repository 实现（网络 + Room）、缓存策略、数据映射。
+- **播放器抽象层**：创建统一的 `VideoPlayer` 接口，支持切换不同播放器内核（ExoPlayer/ijkplayer），便于未来扩展和维护。
+- **视频播放生命周期管理**：在 ViewModel 中管理播放器状态（播放/暂停、进度、清晰度），确保生命周期安全。
+- 功能按 Feature Module 拆分（视频流、个人主页、搜索等），公共能力沉淀在 `core/*`。
+- 复用 Cursor 生成的标准化包结构、依赖注入骨架、Repository 模板、播放器接口，保持一致性。
+
+## 性能与可观测性
+- **播放器选型**：优先使用 ExoPlayer（Google 官方推荐），支持 DASH、HLS 等多种协议，功能强大、稳定、可定制。
+- **视频流列表**：使用 RecyclerView + DiffUtil + Paging 3，实现分页、预加载与局部刷新；禁止全量 `notifyDataSetChanged`。
+- **内存管理（关键）**：
+  - 实现播放器的"预加载"和"释放"策略，当用户滑动离开当前视频时，及时释放播放器资源，避免 OOM。
+  - 使用 RecyclerView 的 `onViewRecycled` 回调进行播放器资源清理。
+  - 监控内存占用峰值，设置合理的缓存上限。
+- **网络优化**：使用 OkHttp 进行视频源请求，配置合理的缓存策略和重试机制，支持多码率自适应。
+- **布局优化**：复杂布局默认 ConstraintLayout，视频卡片使用 ViewStub/Merge 延迟加载。
+- Application 初始化异步化，接入 SplashScreen API；关键初始化移出主线程。
+- **建立性能基线**（播放成功率、首帧耗时、卡顿率、内存占用峰值、FPS、冷启动），每个迭代都对比记录并附 Profiler 截图和播放性能数据。
+
+## 交互与动画
+- **全屏播放**：实现真正的全屏模式，隐藏系统状态栏和导航栏，提供沉浸式体验。
+- **上下滑动切换视频（核心交互）**：
+  - 实现流畅的"惯性滚动"和"无缝切换"，使用 RecyclerView 的 `SnapHelper` 或自定义 `LayoutManager`。
+  - 滑动切换时自动释放上一个视频的播放器资源，预加载下一个视频。
+- **手势控制**：
+  - 左滑快进、右滑快退（可自定义步进时间）。
+  - 上下滑动切换视频（已实现）。
+  - 单击显示/隐藏播控面板。
+- **播控面板**：设计优雅的半透明播控面板，支持拖动进度条、点赞、评论等操作，面板出现和消失要有动画。
+- **下拉刷新**：在第一个视频顶部下拉，触发刷新，加载新的视频列表，动画要自然。
+- **横屏适配**：支持横屏播放，播控面板和交互手势在横屏模式下正确适配。
+- 重要交互需有手势反馈、触觉体验，可借助 Cursor 查找高质量动画实现（如 PagerSnapHelper、Lottie）。
+
+## AI 融合策略（至少深耕一方向）
+- **方案 A：AI 智能清晰度切换**
+  - 根据用户的网络状况（通过 `ConnectivityManager` 获取）和设备性能，动态选择最优的视频清晰度（如 1080p、720p、480p）。
+  - 技术点：网络状态监听、性能评估、多码率视频源管理、自适应算法。
+- **方案 B：AI 内容理解与推荐**
+  - 在用户观看完一个视频后，通过简单的本地模型或模拟 API，分析该视频的标签（如"搞笑"、"科技"、"美食"），并据此推荐下一个视频。
+  - 技术点：数据埋点、推荐算法、模型集成、标签提取。
+- **方案 C：AI 语音识别与字幕**
+  - 在视频播放时，利用 ML Kit 的语音识别功能，实时生成字幕。
+  - 技术点：语音识别、字幕渲染、实时处理、时间轴同步。
+- 任选其一深度落地：写清数据流、推理路径、在线/离线策略、模型管理与降级方案，并在文档中提供示例与指标。
+
+## 工程化要求
+- 统一代码规范（ktlint/Checkstyle + `.editorconfig`），引入 Git Hook 或 CI 校验。
+- Git Flow / GitHub Flow：每个特性交独立分支，PR 前自测 + 自查，必要时附 Profiling 数据。
+- CI（GitHub Actions 等）至少包含构建、单元测试、Lint；提交说明中标记覆盖点。
+- 自动化测试：Presentation 层使用 Robolectric/Compose Test，Domain 层单测 UseCase，Data 层用 Fake/Mock。
+- 若涉及后端/AI 服务定义，使用 Pydantic/JSON Schema（如在 docs 或脚本中）确保一致性。
+
+## 文档更新矩阵
+- `docs/architecture.md`：架构或依赖关系有变必须更新。
+- `docs/api_reference.md`：接口/模型新增或变更时同步更新。
+- `docs/development_plan.md`：任务状态、日期、负责人实时维护。
+- `docs/getting_started.md` & `README.md`：环境、运行、亮点、阶段成果发生变化时更新。
+
+## 工作流程示例
+- **新增功能**：阅读架构/开发计划 -> 确认需求存在并补充设计 -> 基于 Clean Architecture 分层实现 -> 写/更新测试 -> 量化性能/AI指标 -> 更新所有相关文档与开发计划 -> 准备 PR 与亮点。
+- **Bug 修复**：阅读相关模块设计 -> 在开发计划登记 -> 复现+定位 -> 修复并补测试 -> 若涉及架构/接口，更新文档 -> 在计划中标记完成并说明原因。
+
+## 重要提醒
+- ⚠️ 开始任何任务前必须阅读相关文档并确认任务在计划中。
+- ⚠️ 每次完成任务后，立刻更新 `docs/development_plan.md` 与其它受影响文档。
+- ⚠️ 任何改动都要尊重模块化与 Clean Architecture 边界，禁止"旁路"实现。
+- ⚠️ **播放器是核心**：ExoPlayer 是核心组件，必须研究透彻，确保播放器生命周期管理正确，及时释放资源。
+- ⚠️ **内存管理是生命线**：视频 App 最容易出问题的就是内存，时刻关注内存使用情况，使用 Profiler 监控。
+- ⚠️ **交互要"无感"**：用户不应该感觉到"我在操作 App"，而应该是"我在看视频"，所有交互都要流畅、自然。
+- ⚠️ 交付前整理可量化亮点（播放成功率、首帧耗时、卡顿率、内存占用、交互体验、AI 指标），确保评审一眼看到价值。
+
+## 技术栈与运行规范
+- Kotlin + Jetpack 组件（ViewModel/LiveData/StateFlow/Navigation/Paging）。
+- **播放器**：ExoPlayer（核心，支持 DASH、HLS 等协议）。
+- 数据：Room、Retrofit/OkHttp、Hilt 或 Koin。
+- AI：ML Kit、TFLite 或自研推理组件。
+- 构建：Gradle（优先 Kotlin DSL），CI 同步使用相同任务。
+- 终端操作：首次进入终端必须执行 `cd /d D:\Projects\andriod` 并保持会话；需要构建时使用 `./gradlew` 系列命令，先 `./gradlew clean assembleDebug` 验证；如需特定环境（如 Conda/SDK），在 `README.md` 中声明并遵守。
+
+## Cursor 使用约定
+- 用 Cursor 生成标准化模板（包结构、Base 类、Repository 接口、UseCase 壳、播放器接口）、性能/交互最佳实践示例，保障一致性。
+- 利用 Cursor 帮忙排查潜在瓶颈（主线程阻塞、内存泄漏、播放器资源未释放、动画过载）或快速集成 ExoPlayer/AI SDK。
+- 让 Cursor 协助理解 ExoPlayer 的 API 和最佳实践，生成播放器生命周期管理代码。
+- 提交前让 Cursor 列出关键优化点与亮点（特别是播放性能、内存管理、交互体验），确保价值点被记录到文档与 PR。
+
