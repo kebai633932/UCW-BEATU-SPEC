@@ -13,6 +13,9 @@
 ### 2. 仓库结构
 
 - `BeatUClient/`：Android 客户端。
+  - `app/`：入口、Navigation、全局 DI
+  - `shared/`：公共模块（common、network、database、player、designsystem）
+  - `business/`：业务模块（videofeed、user、search、ai、landscape、settings），每个业务包含 presentation/domain/data 三层
 - `BeatUAIService/`、`BeatUContentService/`、`BeatUGateway/`、`BeatUObservability/`：后端与观测性相关工程。
 - `docs/`：统一文档。
 - `BeatUClient/docs/`：客户端需求/原型/流程图资料，`需求.md` 为最新 PRD。

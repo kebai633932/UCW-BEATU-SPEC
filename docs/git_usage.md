@@ -17,7 +17,7 @@ UCW-BEATU-SPEC/
 ```
 
 - **统一仓库**：所有代码直接托管在 `UCW-BEATU-SPEC`，无需额外克隆子仓库。
-- **Gradle Module ≠ Git 子模块**：`BeatUClient` 内部的 `core/*`、`feature/*`、`data`、`domain` 均通过 Gradle 子模块实现，与 Git 无关。
+- **Gradle Module ≠ Git 子模块**：`BeatUClient` 内部的 `shared/*`、`business/*` 均通过 Gradle 子模块实现，与 Git 无关。
 - **协作约束**：持续遵循 `.cursorrules` 的文档驱动流程，开发前后务必同步 `docs/*`。
 
 ---
@@ -54,12 +54,12 @@ git pull origin main
 3. **开发与提交**
    ```bash
    git status
-   git add BeatUClient/feature/feed/...
+   git add BeatUClient/business/videofeed/...
    git commit -m "feat(feed): 新增播放器复用池骨架"
    ```
 4. **推送远端**
    ```bash
-   git push origin feature/feed-player-pool
+   git push origin feature/videofeed-player-pool
    ```
 5. **提 PR & 更新文档**
    - PR 描述列出覆盖模块、测试结果、性能/AI 指标。
@@ -87,7 +87,7 @@ git pull origin main
 | 仅暂存客户端改动 | `git add BeatUClient/...` |
 | 丢弃客户端未暂存修改 | `git restore BeatUClient/...` |
 | 查看单个文件历史 | `git log -- BeatUClient/app/src/...` |
-| 分支差异对比 | `git diff main...feature/feed-player` |
+| 分支差异对比 | `git diff main...feature/videofeed-player` |
 
 ---
 
@@ -133,10 +133,10 @@ git config --show-origin --get-regexp submodule || echo "no submodule"
 
 # 仅提交客户端与文档
 git add BeatUClient docs
-git commit -m "feat(feed): 完成播放器池 + 更新文档"
+git commit -m "feat(videofeed): 完成播放器池 + 更新文档"
 
 # 推送与同步
-git push origin feature/feed-player
+git push origin feature/videofeed-player
 git checkout main
 git pull origin main
 ```

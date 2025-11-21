@@ -12,30 +12,46 @@
 
 ### 2. Android 客户端模块规划（BeatUClient）
 
+**新架构（按业务边界划分）**：
+
 - `app/`
   - 入口 Activity、Navigation、Hilt Application、Splash（Logo→Loading→Feed）。
-- `core/common/`
-  - 扩展方法、Result 类型、Logger、性能指标采集器。
-- `core/network/`
+
+- `shared/common/`
+  - 扩展方法、Result 类型、Logger、性能指标采集器、协程调度器。
+- `shared/network/`
   - Retrofit/OkHttp、API 拦截器、弱网降级策略、多码率源管理。
-- `core/database/`
+- `shared/database/`
   - Room 缓存（Feed、评论、用户信息）、离线策略。
-- `core/player/`
+- `shared/player/`
   - `VideoPlayer` 接口、ExoPlayer (Media3) 实现、PlayerPool（1~3 实例）、预加载与 Surface 复用工具。
-- `core/designsystem/`
+- `shared/designsystem/`
   - 主题、半透明播控面板、动画/触觉反馈统一实现。
-- `feature/feed/`
-  - `ViewPager2` 纵向 Feed（上下滑切换），Paging3 + DiffUtil，手势、播控面板、评论半屏弹层。
-- `feature/profile/`
-  - 个人主页/作者主页、关注状态同步。
-- `feature/search/`
-  - 频道切换、话题发现。
-- `feature/settings/`
-  - AI 开关、清晰度偏好、横屏锁定。
-- `feature/landscape/`
-  - 横屏模式 UI、亮度/音量/锁屏手势。
-- `feature/aiassistant/`
-  - 评论区 `@元宝` AI 问答、推荐策略接口。
+
+- `business/videofeed/`（视频流业务）
+  - `presentation/`：`ViewPager2` 纵向 Feed（上下滑切换），Paging3 + DiffUtil，手势、播控面板、评论半屏弹层。
+  - `domain/`：FeedRepository 接口、UseCase（GetFeedUseCase、LikeVideoUseCase、CommentUseCase 等）。
+  - `data/`：FeedRepository 实现、RemoteDataSource、LocalDataSource、Mapper。
+- `business/user/`（用户业务）
+  - `presentation/`：个人主页/作者主页、关注状态同步。
+  - `domain/`：UserRepository 接口、UseCase。
+  - `data/`：UserRepository 实现。
+- `business/search/`（搜索业务）
+  - `presentation/`：频道切换、话题发现。
+  - `domain/`：SearchRepository 接口、UseCase。
+  - `data/`：SearchRepository 实现。
+- `business/ai/`（AI 业务）
+  - `presentation/`：评论区 `@元宝` AI 问答 UI。
+  - `domain/`：AiRepository 接口、UseCase（AiReplyUseCase、RecommendUseCase）。
+  - `data/`：AiRepository 实现。
+- `business/landscape/`（横屏业务）
+  - `presentation/`：横屏模式 UI、亮度/音量/锁屏手势。
+  - `domain/`：LandscapeRepository 接口、UseCase。
+  - `data/`：LandscapeRepository 实现。
+- `business/settings/`（设置业务）
+  - `presentation/`：AI 开关、清晰度偏好、横屏锁定。
+  - `domain/`：SettingsRepository 接口、UseCase。
+  - `data/`：SettingsRepository 实现（DataStore）。
 
 ### 3. Clean Architecture & 数据流
 
@@ -87,13 +103,27 @@ Data Layer (RemoteDataSource + LocalCache + PlayerDataSource)
 - 与设计稿对齐横屏/评论交互状态。
 - 在 `docs/api_reference.md` 中补充上述接口的字段定义与契约。
 
-### 9. 第二阶段：核心基础设施落地（2025-11-20）
+### 9. 架构重构（2025-11-20）
 
-- `core/common`：落地 `AppResult`、`AppLogger`、`MetricsTracker`、`PlaybackMetrics`、`Stopwatch` 与 `DispatcherProvider`，作为跨层标准工具集，为 Repository 与 UseCase 提供统一的结果包装与性能埋点。
-- `core/network`：产出 `NetworkConfig`、`HeaderInterceptor`、`NetworkLoggingInterceptor`、`OkHttpProvider`、`RetrofitProvider` 与 `ConnectivityObserver`。支持自定义 Header、磁盘缓存、动态日志开关以及网络可达性 Flow，供 Data 层按需注入。
-- `core/database`：基于 Room 构建 `BeatUDatabase`，定义 `VideoEntity`、`CommentEntity`、`InteractionStateEntity`、`Converters` 以及对应 DAO（`VideoDao`、`CommentDao`、`InteractionStateDao`）。数据库构建器默认开启 `fallbackToDestructiveMigration` 以便快速迭代。
-- `core/player`：实现 `VideoPlayer` 接口、`VideoSource`/`VideoQuality` 模型、`VideoPlayerConfig`、`ExoVideoPlayer` 与 `VideoPlayerPool`，并提供 `PlayerMetricsTracker` 负责与 `core/common/metrics` 对接，形成播放器复用 + 指标采集闭环。
-- 以上模块均保持与 Hilt 解耦（纯 Kotlin/Android 类），保证 Feature 与 Data 层在需要时通过 Module/DI 注入，满足 Clean Architecture 的依赖倒置原则。
+**重构目标**：从技术层划分（MVVM + Clean Architecture）重构为业务边界划分，每个业务内部采用 Clean Architecture + Feature 分层。
+
+**新架构特点**：
+- 业务独立：每个业务模块（`business/*`）内部包含完整的 Presentation/Domain/Data 层
+- 公共能力复用：播放器、网络、数据库等公共能力独立模块化（`shared/*`）
+- 并行开发：不同业务可以独立开发、测试、发布
+- 清晰边界：业务间通过明确的接口通信，避免隐式依赖
+
+**公共模块（shared/*）**：
+- `shared/common`：`AppResult`、`AppLogger`、`MetricsTracker`、`PlaybackMetrics`、`Stopwatch`、`DispatcherProvider`
+- `shared/network`：`NetworkConfig`、`HeaderInterceptor`、`NetworkLoggingInterceptor`、`OkHttpProvider`、`RetrofitProvider`、`ConnectivityObserver`
+- `shared/database`：`BeatUDatabase`、`VideoEntity`、`CommentEntity`、`InteractionStateEntity`、`Converters`、DAO 接口
+- `shared/player`：`VideoPlayer` 接口、`VideoSource`/`VideoQuality`、`VideoPlayerConfig`、`ExoVideoPlayer`、`VideoPlayerPool`、`PlayerMetricsTracker`
+- `shared/designsystem`：主题、颜色、字体、通用组件、动画资源
+
+**业务模块（business/*）**：
+- 每个业务模块遵循 Clean Architecture，包含 `presentation/`、`domain/`、`data/` 三层
+- 业务间通过接口通信，通过 DI 注入依赖
+- 详细架构说明见 `docs/重构方案.md`
 
 
 

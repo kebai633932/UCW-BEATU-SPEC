@@ -22,7 +22,8 @@
 
 - [x] BeatU 客户端技术方案白皮书（架构与目录规划）  
   - 2025-11-19 - done by LRZ  
-  - 成果：新增 `docs/client_tech_whitepaper.md`，总结 Clean Architecture 模块划分、播放器/性能/AI 策略与目录规划代码区，为后续模块化开发提供统一蓝本。
+  - 2025-11-20 - 已删除（架构重构后过时）
+  - 成果：原文档描述旧架构（`core/*`、`domain/`、`data/`、`feature/*`），架构重构后已不再适用，已删除。新架构说明见 `docs/architecture.md` 和 `docs/重构方案.md`。
 
 - [x] 项目文档技术栈修正（移除 Compose，明确使用原生 View 系统）  
   - 2025-11-20 - done by LRZ  
@@ -30,7 +31,8 @@
 
 - [x] 刷视频行为代码级流程文档  
   - 2025-11-20 - done by LRZ  
-  - 内容：新增 `docs/code_flow_feed_scrolling.md`，详细描述用户从打开 App 到刷视频（上下滑动切换）的完整代码级流程，涵盖模块调用链（`app/` → `feature/feed/` → `domain/` → `data/` → `core/`）、数据流转路径（Retrofit → Repository → UseCase → ViewModel → UI）、播放器生命周期管理（PlayerPool、预加载、资源释放）与关键代码位置索引。为后续开发提供统一的代码流程参考。
+  - 2025-11-20 - 已删除（架构重构后过时）
+  - 内容：原文档描述旧架构（`feature/feed/` → `domain/` → `data/` → `core/`），架构重构后已不再适用，已删除。
 
 - [x] 第一阶段：基础架构搭建  
   - 2025-11-20 - done by LRZ  
@@ -68,25 +70,33 @@
     4. `core/player`：实现 `VideoPlayer` 抽象、`VideoSource`/`VideoQuality`、`VideoPlayerConfig`、`ExoVideoPlayer`、`VideoPlayerPool`、`PlayerMetricsTracker`。  
     5. 将上述交付同步至 `docs/architecture.md`、`docs/client_tech_whitepaper.md`，并保持未来阶段可扩展性。
 
-### 2. 待规划任务示例（占位）
+- [x] 架构重构方案制定  
+  - 2025-11-20 - done by Auto  
+  - 内容：从技术层划分（MVVM + Clean Architecture）重构为业务边界划分，每个业务内部采用 Clean Architecture + Feature 分层，公共模块独立搭建。  
+  - 成果：新增 `docs/重构方案.md`，包含：
+    1. 重构背景与目标分析
+    2. 业务边界识别（VideoFeed、User、Search、AI、Landscape、Settings）
+    3. 新架构设计（business/* + shared/* 结构）
+    4. 公共模块设计（shared/common、player、network、database、designsystem）
+    5. 依赖关系图与通信方式
+    6. 分步骤实施计划（阶段 0-3，共 14 个步骤）
+    7. 迁移检查清单、风险与注意事项、测试策略、回滚方案
+    8. 团队协作指南、常见问题解答、时间估算
+  - 下一步：按照重构方案逐步执行迁移，预计 18-26 天（单人）或 10-12 天（3-4 人并行）
 
-- [ ] 第二阶段：核心基础设施（2-3 天）
-  - [ ] 实现 `core/network`（Retrofit + OkHttp 配置、拦截器、弱网降级）
-  - [ ] 实现 `core/database`（Room 配置、Entity、Dao、迁移）
-  - [ ] 实现 `core/player`（VideoPlayer 接口、ExoPlayer 实现、PlayerPool）
-  - [ ] 实现 `core/common`（Result、Logger、Metrics）
-- [ ] 第三阶段：数据层与领域层（2-3 天）
-  - [ ] 定义数据模型（Video、Comment、UserSummary 等）
-  - [ ] 实现 Repository 接口
-  - [ ] 实现 Repository 实现类
-  - [ ] 实现 UseCase
-- [ ] 第四阶段：功能开发（按需求优先级）
-  - [ ] 视频播放器抽象层设计与 ExoPlayer 集成方案（含生命周期与内存管理策略）。
-  - [ ] 视频流（Feed）页面交互与性能指标基线定义。
-  - [ ] AI 能力方案选型（清晰度切换 / 推荐 / 语音识别）与数据流设计。
-  - [ ] Feed MVP：`feature/feed` 使用 ViewPager2 + Paging3 + PlayerPool（含双击点赞、评论半屏、刷新/手势动画）。
-  - [ ] 横屏模式（Landscape）交互：亮度/音量/锁屏/倍速/清晰度菜单与 UI 状态管理。
-  - [ ] AI 评论助手（@元宝）与推荐闭环：定义请求/响应模型、埋点、降级策略及指标。
+- [x] 阶段 0：架构重构准备与公共模块迁移  
+  - 2025-11-20 - done by Auto  
+  - 内容：
+    1. ✅ 创建新目录结构骨架（`business/` 和 `shared/`）
+    2. ✅ 迁移 `core/*` 到 `shared/*`（common、network、database、player、designsystem）
+    3. ✅ 更新包名和导入路径（`core.*` → `shared.*`）
+    4. ✅ 创建业务模块骨架（videofeed、user、search、ai、landscape、settings）
+    5. ✅ 更新 `settings.gradle.kts` 和所有 `build.gradle.kts` 文件
+    6. ✅ 完成公共设施代码编写（确保所有 shared 模块代码完整）
+    7. ✅ 更新所有文档（architecture.md、getting_started.md、development_plan.md）
+  - 成果：新架构目录结构已建立，公共模块已迁移并完成代码编写，业务模块骨架已创建，文档已更新。可以开始阶段 1：独立业务迁移。
+
+
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 

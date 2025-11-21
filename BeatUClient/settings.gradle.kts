@@ -22,23 +22,34 @@ dependencyResolutionManagement {
 rootProject.name = "BeatU-Client"
 include(":app")
 
-// Core modules
-include(":core:common")
-include(":core:network")
-include(":core:database")
-include(":core:player")
-include(":core:designsystem")
+// Shared modules (原 core/* 迁移而来)
+include(":shared:common")
+include(":shared:network")
+include(":shared:database")
+include(":shared:player")
+include(":shared:designsystem")
 
-// Domain module
-include(":domain")
+// Business modules (按业务边界划分)
+include(":business:videofeed:presentation")
+include(":business:videofeed:domain")
+include(":business:videofeed:data")
 
-// Data module
-include(":data")
+include(":business:user:presentation")
+include(":business:user:domain")
+include(":business:user:data")
 
-// Feature modules
-include(":feature:feed")
-include(":feature:landscape")
-include(":feature:profile")
-include(":feature:search")
-include(":feature:settings")
-include(":feature:aiassistant")
+include(":business:search:presentation")
+include(":business:search:domain")
+include(":business:search:data")
+
+include(":business:ai:presentation")
+include(":business:ai:domain")
+include(":business:ai:data")
+
+include(":business:landscape:presentation")
+include(":business:landscape:domain")
+include(":business:landscape:data")
+
+include(":business:settings:presentation")
+include(":business:settings:domain")
+include(":business:settings:data")

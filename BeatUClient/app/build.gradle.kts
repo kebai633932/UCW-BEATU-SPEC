@@ -42,26 +42,23 @@ android {
 }
 
 dependencies {
-    // Core modules
-    implementation(project(":core:common"))
-    implementation(project(":core:network"))
-    implementation(project(":core:database"))
-    implementation(project(":core:player"))
-    implementation(project(":core:designsystem"))
+    // Shared modules
+    implementation(project(":shared:common"))
+    implementation(project(":shared:network"))
+    implementation(project(":shared:database"))
+    implementation(project(":shared:player"))
+    implementation(project(":shared:designsystem"))
     
-    // Domain
-    implementation(project(":domain"))
+    // Business modules - Presentation layers
+    implementation(project(":business:videofeed:presentation"))
+    implementation(project(":business:user:presentation"))
+    implementation(project(":business:search:presentation"))
+    implementation(project(":business:ai:presentation"))
+    implementation(project(":business:landscape:presentation"))
+    implementation(project(":business:settings:presentation"))
     
-    // Data
-    implementation(project(":data"))
-    
-    // Feature modules
-    implementation(project(":feature:feed"))
-    implementation(project(":feature:landscape"))
-    implementation(project(":feature:profile"))
-    implementation(project(":feature:search"))
-    implementation(project(":feature:settings"))
-    implementation(project(":feature:aiassistant"))
+    // Fragment
+    implementation(libs.androidx.fragment.ktx)
     
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
