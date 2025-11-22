@@ -4,7 +4,6 @@ package com.ucw.beatu.business.videofeed.presentation.databinding;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -13,7 +12,9 @@ import androidx.annotation.Nullable;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.viewbinding.ViewBinding;
 import androidx.viewbinding.ViewBindings;
+import androidx.viewpager2.widget.ViewPager2;
 import com.ucw.beatu.business.videofeed.presentation.R;
+import com.ucw.beatu.business.videofeed.presentation.ui.widget.TabIndicatorView;
 import java.lang.NullPointerException;
 import java.lang.Override;
 import java.lang.String;
@@ -21,9 +22,6 @@ import java.lang.String;
 public final class FragmentFeedBinding implements ViewBinding {
   @NonNull
   private final ConstraintLayout rootView;
-
-  @NonNull
-  public final LinearLayout bottomInteraction;
 
   @NonNull
   public final TextView btnFollow;
@@ -35,66 +33,33 @@ public final class FragmentFeedBinding implements ViewBinding {
   public final TextView btnRecommend;
 
   @NonNull
-  public final ImageView ivAddAvatar;
-
-  @NonNull
-  public final ImageView ivAvatar;
-
-  @NonNull
-  public final ImageView ivComment;
-
-  @NonNull
-  public final ImageView ivFavorite;
-
-  @NonNull
-  public final ImageView ivLike;
-
-  @NonNull
   public final ImageView ivSearch;
 
   @NonNull
-  public final ImageView ivShare;
+  public final LinearLayout tabContainer;
+
+  @NonNull
+  public final TabIndicatorView tabIndicator;
 
   @NonNull
   public final ConstraintLayout topNavigation;
 
   @NonNull
-  public final TextView tvUsername;
+  public final ViewPager2 viewpager;
 
-  @NonNull
-  public final TextView tvVideoDescription;
-
-  @NonNull
-  public final TextView tvVideoPlaceholder;
-
-  @NonNull
-  public final FrameLayout videoContainer;
-
-  private FragmentFeedBinding(@NonNull ConstraintLayout rootView,
-      @NonNull LinearLayout bottomInteraction, @NonNull TextView btnFollow, @NonNull TextView btnMe,
-      @NonNull TextView btnRecommend, @NonNull ImageView ivAddAvatar, @NonNull ImageView ivAvatar,
-      @NonNull ImageView ivComment, @NonNull ImageView ivFavorite, @NonNull ImageView ivLike,
-      @NonNull ImageView ivSearch, @NonNull ImageView ivShare,
-      @NonNull ConstraintLayout topNavigation, @NonNull TextView tvUsername,
-      @NonNull TextView tvVideoDescription, @NonNull TextView tvVideoPlaceholder,
-      @NonNull FrameLayout videoContainer) {
+  private FragmentFeedBinding(@NonNull ConstraintLayout rootView, @NonNull TextView btnFollow,
+      @NonNull TextView btnMe, @NonNull TextView btnRecommend, @NonNull ImageView ivSearch,
+      @NonNull LinearLayout tabContainer, @NonNull TabIndicatorView tabIndicator,
+      @NonNull ConstraintLayout topNavigation, @NonNull ViewPager2 viewpager) {
     this.rootView = rootView;
-    this.bottomInteraction = bottomInteraction;
     this.btnFollow = btnFollow;
     this.btnMe = btnMe;
     this.btnRecommend = btnRecommend;
-    this.ivAddAvatar = ivAddAvatar;
-    this.ivAvatar = ivAvatar;
-    this.ivComment = ivComment;
-    this.ivFavorite = ivFavorite;
-    this.ivLike = ivLike;
     this.ivSearch = ivSearch;
-    this.ivShare = ivShare;
+    this.tabContainer = tabContainer;
+    this.tabIndicator = tabIndicator;
     this.topNavigation = topNavigation;
-    this.tvUsername = tvUsername;
-    this.tvVideoDescription = tvVideoDescription;
-    this.tvVideoPlaceholder = tvVideoPlaceholder;
-    this.videoContainer = videoContainer;
+    this.viewpager = viewpager;
   }
 
   @Override
@@ -124,12 +89,6 @@ public final class FragmentFeedBinding implements ViewBinding {
     // This is done to optimize the compiled bytecode for size and performance.
     int id;
     missingId: {
-      id = R.id.bottom_interaction;
-      LinearLayout bottomInteraction = ViewBindings.findChildViewById(rootView, id);
-      if (bottomInteraction == null) {
-        break missingId;
-      }
-
       id = R.id.btn_follow;
       TextView btnFollow = ViewBindings.findChildViewById(rootView, id);
       if (btnFollow == null) {
@@ -148,45 +107,21 @@ public final class FragmentFeedBinding implements ViewBinding {
         break missingId;
       }
 
-      id = R.id.iv_add_avatar;
-      ImageView ivAddAvatar = ViewBindings.findChildViewById(rootView, id);
-      if (ivAddAvatar == null) {
-        break missingId;
-      }
-
-      id = R.id.iv_avatar;
-      ImageView ivAvatar = ViewBindings.findChildViewById(rootView, id);
-      if (ivAvatar == null) {
-        break missingId;
-      }
-
-      id = R.id.iv_comment;
-      ImageView ivComment = ViewBindings.findChildViewById(rootView, id);
-      if (ivComment == null) {
-        break missingId;
-      }
-
-      id = R.id.iv_favorite;
-      ImageView ivFavorite = ViewBindings.findChildViewById(rootView, id);
-      if (ivFavorite == null) {
-        break missingId;
-      }
-
-      id = R.id.iv_like;
-      ImageView ivLike = ViewBindings.findChildViewById(rootView, id);
-      if (ivLike == null) {
-        break missingId;
-      }
-
       id = R.id.iv_search;
       ImageView ivSearch = ViewBindings.findChildViewById(rootView, id);
       if (ivSearch == null) {
         break missingId;
       }
 
-      id = R.id.iv_share;
-      ImageView ivShare = ViewBindings.findChildViewById(rootView, id);
-      if (ivShare == null) {
+      id = R.id.tab_container;
+      LinearLayout tabContainer = ViewBindings.findChildViewById(rootView, id);
+      if (tabContainer == null) {
+        break missingId;
+      }
+
+      id = R.id.tab_indicator;
+      TabIndicatorView tabIndicator = ViewBindings.findChildViewById(rootView, id);
+      if (tabIndicator == null) {
         break missingId;
       }
 
@@ -196,34 +131,14 @@ public final class FragmentFeedBinding implements ViewBinding {
         break missingId;
       }
 
-      id = R.id.tv_username;
-      TextView tvUsername = ViewBindings.findChildViewById(rootView, id);
-      if (tvUsername == null) {
+      id = R.id.viewpager;
+      ViewPager2 viewpager = ViewBindings.findChildViewById(rootView, id);
+      if (viewpager == null) {
         break missingId;
       }
 
-      id = R.id.tv_video_description;
-      TextView tvVideoDescription = ViewBindings.findChildViewById(rootView, id);
-      if (tvVideoDescription == null) {
-        break missingId;
-      }
-
-      id = R.id.tv_video_placeholder;
-      TextView tvVideoPlaceholder = ViewBindings.findChildViewById(rootView, id);
-      if (tvVideoPlaceholder == null) {
-        break missingId;
-      }
-
-      id = R.id.video_container;
-      FrameLayout videoContainer = ViewBindings.findChildViewById(rootView, id);
-      if (videoContainer == null) {
-        break missingId;
-      }
-
-      return new FragmentFeedBinding((ConstraintLayout) rootView, bottomInteraction, btnFollow,
-          btnMe, btnRecommend, ivAddAvatar, ivAvatar, ivComment, ivFavorite, ivLike, ivSearch,
-          ivShare, topNavigation, tvUsername, tvVideoDescription, tvVideoPlaceholder,
-          videoContainer);
+      return new FragmentFeedBinding((ConstraintLayout) rootView, btnFollow, btnMe, btnRecommend,
+          ivSearch, tabContainer, tabIndicator, topNavigation, viewpager);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));
