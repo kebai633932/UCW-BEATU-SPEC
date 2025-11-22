@@ -44,6 +44,13 @@ class ConnectivityObserver(context: Context) {
             }
         } ?: Status.Unavailable
 
+    /**
+     * 同步检查网络是否连接
+     */
+    fun isConnected(): Boolean {
+        return currentStatus() == Status.Available
+    }
+
     enum class Status { Available, Unavailable, Lost }
 }
 

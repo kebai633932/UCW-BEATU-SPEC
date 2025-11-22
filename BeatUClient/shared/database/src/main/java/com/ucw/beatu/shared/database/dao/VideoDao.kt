@@ -12,10 +12,22 @@ interface VideoDao {
     @Query("SELECT * FROM videos ORDER BY viewCount DESC LIMIT :limit")
     fun observeTopVideos(limit: Int): Flow<List<VideoEntity>>
 
+    @Query("SELECT * FROM videos WHERE id = :id LIMIT 1")
+    suspend fun getVideoById(id: String): VideoEntity?
+
+    @Query("SELECT * FROM videos WHERE id = :id LIMIT 1")
+    fun observeVideoById(id: String): Flow<VideoEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(items: List<VideoEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(item: VideoEntity)
+
     @Query("DELETE FROM videos")
     suspend fun clear()
+
+    @Query("DELETE FROM videos WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
