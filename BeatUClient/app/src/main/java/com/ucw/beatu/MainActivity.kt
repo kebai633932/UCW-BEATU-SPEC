@@ -91,17 +91,7 @@ class MainActivity : AppCompatActivity(), MainActivityBridge {
                 }
             })
             
-            // 显示 FeedFragment
-            if (savedInstanceState == null) {
-                Log.d(TAG, "onCreate: Adding FeedFragment")
-                supportFragmentManager.commit {
-                    replace(R.id.fragment_container, FeedFragment())
-                }
-                Log.d(TAG, "onCreate: FeedFragment added")
-            } else {
-                Log.d(TAG, "onCreate: Restoring from saved state")
-            }
-            
+            // Navigation Component 会自动处理 Fragment 的创建和恢复
             // 注册 Fragment 生命周期回调，用于获取 FeedFragment 实例
             supportFragmentManager.registerFragmentLifecycleCallbacks(
                 object : androidx.fragment.app.FragmentManager.FragmentLifecycleCallbacks() {
@@ -158,26 +148,12 @@ class MainActivity : AppCompatActivity(), MainActivityBridge {
         
         btnMe?.setOnClickListener {
             // 使用 Navigation Graph 跳转到用户主页
-            val navHostFragment = supportFragmentManager.findFragmentById(R.id.fragment_container) as? NavHostFragment
-            navHostFragment?.navController?.let { navController ->
-                NavigationHelper.navigateByStringId(
-                    navController,
-                    NavigationIds.ACTION_FEED_TO_USER_PROFILE,
-                    this
-                )
-            }
+            navigateToUserProfile()
         }
         
         ivSearch?.setOnClickListener {
             // 使用 Navigation Graph 跳转到搜索页面
-            val navHostFragment = supportFragmentManager.findFragmentById(R.id.fragment_container) as? NavHostFragment
-            navHostFragment?.navController?.let { navController ->
-                NavigationHelper.navigateByStringId(
-                    navController,
-                    NavigationIds.ACTION_FEED_TO_SEARCH,
-                    this
-                )
-            }
+            navigateToSearch()
         }
     }
     
@@ -319,6 +295,78 @@ class MainActivity : AppCompatActivity(), MainActivityBridge {
                     recommendTabCenterX, recommendTabCenterY,
                     followTabCenterX, followTabCenterY
                 )
+            }
+        }
+    }
+    
+    /**
+     * 导航到用户主页
+     */
+    private fun navigateToUserProfile() {
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.fragment_container) as? NavHostFragment
+        navHostFragment?.navController?.let { navController ->
+            try {
+                NavigationHelper.navigateByStringId(
+                    navController,
+                    NavigationIds.ACTION_FEED_TO_USER_PROFILE,
+                    this
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to navigate to user profile", e)
+            }
+        }
+    }
+    
+    /**
+     * 导航到搜索页面
+     */
+    private fun navigateToSearch() {
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.fragment_container) as? NavHostFragment
+        navHostFragment?.navController?.let { navController ->
+            try {
+                NavigationHelper.navigateByStringId(
+                    navController,
+                    NavigationIds.ACTION_FEED_TO_SEARCH,
+                    this
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to navigate to search", e)
+            }
+        }
+    }
+    
+    /**
+     * 导航到设置页面
+     */
+    fun navigateToSettings() {
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.fragment_container) as? NavHostFragment
+        navHostFragment?.navController?.let { navController ->
+            try {
+                NavigationHelper.navigateByStringId(
+                    navController,
+                    NavigationIds.ACTION_FEED_TO_SETTINGS,
+                    this
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to navigate to settings", e)
+            }
+        }
+    }
+    
+    /**
+     * 导航到横屏页面
+     */
+    fun navigateToLandscape() {
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.fragment_container) as? NavHostFragment
+        navHostFragment?.navController?.let { navController ->
+            try {
+                NavigationHelper.navigateByStringId(
+                    navController,
+                    NavigationIds.ACTION_FEED_TO_LANDSCAPE,
+                    this
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to navigate to landscape", e)
             }
         }
     }

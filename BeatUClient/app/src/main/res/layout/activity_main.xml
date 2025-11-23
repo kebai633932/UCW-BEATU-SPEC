@@ -126,11 +126,14 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-    <!-- Fragment 容器 -->
+    <!-- Fragment 容器 - 使用 NavHostFragment -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/fragment_container"
+        android:name="androidx.navigation.fragment.NavHostFragment"
         android:layout_width="match_parent"
         android:layout_height="0dp"
+        app:defaultNavHost="true"
+        app:navGraph="@navigation/main_nav_graph"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
