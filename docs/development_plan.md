@@ -219,6 +219,24 @@
        - 修复布局文件中的 `android:tint` → `app:tint`（9处）
        - 修复 `StateFlow` 观察方式（使用 `repeatOnLifecycle`）
        - 修复 `onBackPressed()` 废弃警告
+  - 成果：
+    - 完整的横屏视频播放页面（1 个 Activity + 1 个 Fragment + 1 个 Adapter）
+    - 完整的控制面板 UI（顶部栏 + 右侧交互按钮 + 指示器）
+    - 完整的手势控制系统（6 种手势：单击、双击、长按、水平滑动、亮度调节、音量调节）
+    - 完整的交互功能（点赞、收藏、倍速、清晰度、锁屏、退出）
+    - 播放器生命周期管理（播放/暂停、进度更新、Seek、倍速、错误处理）
+    - Mock 数据支持（便于测试和开发）
+    - 代码通过 Linter 检查，无编译错误
+  - 下一步：
+    - 接入真实数据层（LandscapeRepository 实现网络请求）
+    - 实现评论浮层（半屏弹层，视频缩至上半屏）
+    - 实现分享浮层（复制链接、保存带二维码图片）
+    - 实现清晰度菜单（下拉选择，而非循环切换）
+    - 添加震动反馈（点赞、双击等交互）
+
+- [x] Landscape 横屏页 Mock 数据提供器 + 缓存保护  
+  - 2025-11-24 - done by GPT-5.1 Codex  
+  - 内容：新增 `LandscapeMockVideoProvider` 统一维护横屏播放器 Demo 视频列表，并在 `LandscapeViewModel` 中通过分页接口获取假数据、限制缓存数量，避免 `notifyDataSetChanged` 式全量替换导致的内存膨胀。为每页生成唯一 `id` 和动态统计字段，后续替换真实数据时只需更换 Provider/Repository。
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 
