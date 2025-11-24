@@ -1,0 +1,62 @@
+package com.ucw.beatu.business.videofeed.domain.repository
+
+import com.ucw.beatu.business.videofeed.domain.model.Comment
+import com.ucw.beatu.business.videofeed.domain.model.Video
+import com.ucw.beatu.shared.common.result.AppResult
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * 视频仓储接口
+ * 定义业务层需要的数据访问接口
+ */
+interface VideoRepository {
+    /**
+     * 获取视频列表（分页）
+     * @param page 页码，从1开始
+     * @param limit 每页数量
+     * @return Flow<AppResult<List<Video>>> 响应式数据流
+     */
+    fun getVideoFeed(page: Int = 1, limit: Int = 20): Flow<AppResult<List<Video>>>
+
+    /**
+     * 获取视频详情
+     * @param videoId 视频ID
+     * @return AppResult<Video>
+     */
+    suspend fun getVideoDetail(videoId: String): AppResult<Video>
+
+    /**
+     * 获取评论列表（分页）
+     * @param videoId 视频ID
+     * @param page 页码，从1开始
+     * @param limit 每页数量
+     * @return Flow<AppResult<List<Comment>>> 响应式数据流
+     */
+    fun getComments(videoId: String, page: Int = 1, limit: Int = 20): Flow<AppResult<List<Comment>>>
+
+    /**
+     * 点赞视频
+     */
+    suspend fun likeVideo(videoId: String): AppResult<Unit>
+
+    /**
+     * 取消点赞
+     */
+    suspend fun unlikeVideo(videoId: String): AppResult<Unit>
+
+    /**
+     * 收藏视频
+     */
+    suspend fun favoriteVideo(videoId: String): AppResult<Unit>
+
+    /**
+     * 取消收藏
+     */
+    suspend fun unfavoriteVideo(videoId: String): AppResult<Unit>
+
+    /**
+     * 发布评论
+     */
+    suspend fun postComment(videoId: String, content: String): AppResult<Comment>
+}
+

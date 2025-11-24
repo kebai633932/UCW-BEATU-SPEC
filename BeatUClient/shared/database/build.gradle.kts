@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.hilt)
 }
 
 android {
@@ -61,5 +62,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    
+    // Hilt (for dependency injection in PreferencesDataStore)
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
 }
 
