@@ -2,17 +2,23 @@ package com.ucw.beatu.business.videofeed.presentation.ui
 
 import android.os.Bundle
 import android.util.Log
+import android.view.GestureDetector
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.GestureDetectorCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.fragment.findNavController
 import androidx.viewpager2.widget.ViewPager2
 import com.ucw.beatu.business.videofeed.presentation.R
 import com.ucw.beatu.business.videofeed.presentation.ui.adapter.VideoFeedAdapter
 import com.ucw.beatu.business.videofeed.presentation.viewmodel.RecommendViewModel
+import com.ucw.beatu.shared.common.navigation.NavigationHelper
+import com.ucw.beatu.shared.common.navigation.NavigationIds
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -32,6 +38,10 @@ class RecommendFragment : Fragment() {
     private var viewPager: ViewPager2? = null
     private var adapter: VideoFeedAdapter? = null
     private var isRefreshing = false
+    
+    // 左滑手势检测
+    private var gestureDetector: GestureDetectorCompat? = null
+    private var rootView: View? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +54,8 @@ class RecommendFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View? {
         Log.d(TAG, "onCreateView: Creating view")
-        return inflater.inflate(R.layout.fragment_recommend, container, false)
+        rootView = inflater.inflate(R.layout.fragment_recommend, container, false)
+        return rootView
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -81,6 +92,9 @@ class RecommendFragment : Fragment() {
             // 设置触摸监听，检测下拉刷新
             setupPullToRefresh(vp)
         }
+        
+        // 设置左滑手势检测
+        setupSwipeLeftGesture()
         
         // 观察 ViewModel 状态
         observeViewModel()
@@ -154,10 +168,82 @@ class RecommendFragment : Fragment() {
         // ViewPager2 中的 Fragment 会自己处理生命周期
     }
     
+    /**
+     * 设置左滑手势检测
+     * 当用户在推荐页左滑时，跳转到个人主页
+     * 注意：需要与 ViewPager2 的垂直滑动区分开
+     */
+    private fun setupSwipeLeftGesture() {
+        rootView?.let { view ->
+            gestureDetector = GestureDetectorCompat(
+                requireContext(),
+                object : GestureDetector.SimpleOnGestureListener() {
+                    override fun onFling(
+                        e1: MotionEvent?,
+                        e2: MotionEvent,
+                        velocityX: Float,
+                        velocityY: Float
+                    ): Boolean {
+                        if (e1 == null || e2 == null) return false
+                        
+                        val deltaX = e2.x - e1.x
+                        val deltaY = e2.y - e1.y
+                        val absDeltaX = kotlin.math.abs(deltaX)
+                        val absDeltaY = kotlin.math.abs(deltaY)
+                        
+                        // 判断是否为左滑：
+                        // 1. 水平位移明显大于垂直位移（至少2倍）
+                        // 2. 向左滑动（deltaX < 0）
+                        // 3. 水平位移超过阈值（100dp）
+                        // 4. 水平速度足够快（velocityX < -1000）
+                        val minHorizontalDistance = 100 * resources.displayMetrics.density
+                        if (absDeltaX > absDeltaY * 2 && 
+                            deltaX < 0 && 
+                            absDeltaX > minHorizontalDistance &&
+                            velocityX < -1000) {
+                            Log.d(TAG, "Left swipe detected, navigating to user profile")
+                            navigateToUserProfile()
+                            return true
+                        }
+                        
+                        return false
+                    }
+                }
+            )
+            
+            // 在根视图上设置触摸监听
+            // 注意：返回 false 表示不拦截事件，让 ViewPager2 正常处理垂直滑动
+            view.setOnTouchListener { _, event ->
+                val handled = gestureDetector?.onTouchEvent(event) ?: false
+                // 如果手势检测器处理了事件（左滑），返回 true 拦截事件
+                // 否则返回 false，让 ViewPager2 处理垂直滑动
+                handled
+            }
+        }
+    }
+    
+    /**
+     * 导航到用户主页
+     */
+    private fun navigateToUserProfile() {
+        try {
+            val navController = findNavController()
+            NavigationHelper.navigateByStringId(
+                navController,
+                NavigationIds.ACTION_FEED_TO_USER_PROFILE,
+                requireContext()
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to navigate to user profile", e)
+        }
+    }
+    
     override fun onDestroyView() {
         super.onDestroyView()
         viewPager = null
         adapter = null
+        gestureDetector = null
+        rootView = null
     }
 }
 

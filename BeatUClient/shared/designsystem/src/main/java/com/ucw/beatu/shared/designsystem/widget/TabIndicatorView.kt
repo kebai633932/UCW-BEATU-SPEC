@@ -1,4 +1,4 @@
-package com.ucw.beatu.business.videofeed.presentation.ui.widget
+package com.ucw.beatu.shared.designsystem.widget
 
 import android.animation.ValueAnimator
 import android.content.Context
@@ -7,8 +7,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.util.AttributeSet
 import android.view.View
-import androidx.core.content.ContextCompat
-import com.ucw.beatu.business.videofeed.presentation.R
 
 /**
  * 水滴形状的Tab指示器
@@ -73,8 +71,6 @@ class TabIndicatorView @JvmOverloads constructor(
     private var followTabY: Float = 0f
     private var recommendTabX: Float = 0f
     private var recommendTabY: Float = 0f
-    private var meTabX: Float = 0f
-    private var meTabY: Float = 0f
 
     // 动画
     private var animator: ValueAnimator? = null
@@ -210,27 +206,23 @@ class TabIndicatorView @JvmOverloads constructor(
      * @param followY 关注Tab的中心Y坐标（相对于指示器View）
      * @param recommendX 推荐Tab的中心X坐标（相对于指示器View）
      * @param recommendY 推荐Tab的中心Y坐标（相对于指示器View）
-     * @param meX 我Tab的中心X坐标（相对于指示器View）
-     * @param meY 我Tab的中心Y坐标（相对于指示器View）
      */
-    fun setTabPositions(followX: Float, followY: Float, recommendX: Float, recommendY: Float, meX: Float, meY: Float) {
+    fun setTabPositions(followX: Float, followY: Float, recommendX: Float, recommendY: Float) {
         followTabX = followX
         followTabY = followY
         recommendTabX = recommendX
         recommendTabY = recommendY
-        meTabX = meX
-        meTabY = meY
         invalidate()
     }
     
     /**
      * 移动到指定Tab位置（用于页面切换完成时）
+     * @param tabIndex 0=关注，1=推荐
      */
     fun moveToTab(tabIndex: Int) {
         val (targetTabX, targetTabY) = when (tabIndex) {
             0 -> followTabX to followTabY
             1 -> recommendTabX to recommendTabY
-            2 -> meTabX to meTabY
             else -> recommendTabX to recommendTabY
         }
         startX = targetTabX
