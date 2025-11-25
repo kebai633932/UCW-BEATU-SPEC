@@ -1,25 +1,83 @@
 package com.ucw.beatu.business.user.presentation.ui
 
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Outline
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import android.widget.ImageView
+import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.ucw.beatu.business.user.presentation.R
+import com.ucw.beatu.business.user.presentation.ui.adapter.UserWorkUiModel
+import com.ucw.beatu.business.user.presentation.ui.adapter.UserWorksAdapter
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 /**
  * 用户主页Fragment
  * 显示用户头像、昵称、作品列表等信息
  */
+@AndroidEntryPoint
 class UserProfileFragment : Fragment() {
 
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var adapter: UserWorksAdapter
+    private val viewModel: UserProfileViewModel by viewModels()
+
+    // UI 元素
+    private lateinit var ivAvatar: ImageView
+    private lateinit var tvUsername: TextView
+    private lateinit var tvBio: TextView
+    private lateinit var tvLikesCount: TextView
+    private lateinit var tvFollowingCount: TextView
+    private lateinit var tvFollowersCount: TextView
+    private lateinit var rvWorks: RecyclerView
+    
+    // 头像上传相关
+    private var currentAvatarFile: File? = null
+    private val pickImageLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                handleImageSelection(uri)
+            }
+        }
+    }
+    
+    // 标签按钮
+    private lateinit var tabWorks: TextView
+    private lateinit var tabCollections: TextView
+    private lateinit var tabLikes: TextView
+    private lateinit var tabHistory: TextView
+    
+    // 当前选中的标签
+    private var selectedTab: TextView? = null
+    
+    private val worksAdapter = UserWorksAdapter()
+    private var allWorks: List<UserWorkUiModel> = emptyList()
+
+    // 用户ID（从参数获取，默认为当前用户）
+    private val userId: String
+        get() = arguments?.getString(ARG_USER_ID) ?: "current_user"
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -32,104 +90,366 @@ class UserProfileFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        // 初始化 UI 元素
+        initViews(view)
+
         // 设置头像圆角裁剪
         setupAvatarRoundCorner(view)
 
-        // 初始化作品列表
-        initWorksList(view)
+        // 设置头像点击上传
+        setupAvatarUpload()
 
-        // TODO: 加载用户真实数据
-        loadUserData()
+        // 设置名字和名言的点击编辑功能
+        setupEditableFields()
+
+        // 初始化标签切换
+        initTabs(view)
+
+        // 初始化作品列表并加载数据
+        initWorksList()
+        loadAllWorks()
+
+        // 观察 ViewModel 数据
+        observeViewModel()
+
+        // 初始化并加载用户数据
+        viewModel.initMockData(userId)
+        viewModel.loadUser(userId)
+    }
+
+    /**
+     * 初始化作品列表
+     */
+    private fun initWorksList() {
+        rvWorks.apply {
+            layoutManager = GridLayoutManager(requireContext(), 3)
+            adapter = worksAdapter
+            setHasFixedSize(true)
+        }
+    }
+
+    /**
+     * 加载全部作品数据（当前为占位数据）
+     */
+    private fun loadAllWorks() {
+        allWorks = generateMockWorks()
+        worksAdapter.submitList(allWorks)
+    }
+
+    private fun generateMockWorks(): List<UserWorkUiModel> {
+        val mockPlayCounts = listOf(
+            12800L, 56000L, 9400L, 204000L, 18400L, 33200L,
+            75200L, 91800L, 4600L, 120000L, 81500L, 21000L
+        )
+        return mockPlayCounts.mapIndexed { index, playCount ->
+            UserWorkUiModel(
+                id = "work_$index",
+                thumbnailRes = R.drawable.ic_avatar_placeholder,
+                playCount = playCount
+            )
+        }
+    }
+
+    /**
+     * 初始化 UI 元素
+     */
+    private fun initViews(view: View) {
+        ivAvatar = view.findViewById(R.id.iv_avatar)
+        tvUsername = view.findViewById(R.id.tv_username)
+        tvBio = view.findViewById(R.id.tv_bio)
+        tvLikesCount = view.findViewById(R.id.tv_likes_count)
+        tvFollowingCount = view.findViewById(R.id.tv_following_count)
+        tvFollowersCount = view.findViewById(R.id.tv_followers_count)
+        rvWorks = view.findViewById(R.id.rv_works)
+    }
+
+    /**
+    * 设置名字和名言的点击编辑功能
+    */
+    private fun setupEditableFields() {
+        // 名字点击编辑
+        tvUsername.setOnClickListener {
+            android.util.Log.d("UserProfileFragment", "用户名被点击")
+            showEditNameDialog()
+        }
+        
+        // 名言点击编辑
+        tvBio.setOnClickListener {
+            android.util.Log.d("UserProfileFragment", "简介被点击")
+            showEditBioDialog()
+        }
+        
+        // 确保 TextView 可点击
+        tvUsername.isClickable = true
+        tvUsername.isFocusable = true
+        tvBio.isClickable = true
+        tvBio.isFocusable = true
+    }
+    /**
+    * 显示编辑名字对话框
+    */
+    private fun showEditNameDialog() {
+        val currentName = tvUsername.text.toString()
+        val input = android.widget.EditText(requireContext()).apply {
+            setText(currentName)
+            setSelection(currentName.length)
+            hint = "请输入名字"
+            textSize = 16f
+        }
+        
+        android.app.AlertDialog.Builder(requireContext())
+            .setTitle("编辑名字")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isNotEmpty()) {
+                    viewModel.updateName(userId, newName)
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /**
+    * 显示编辑名言对话框
+    */
+    private fun showEditBioDialog() {
+        val currentBio = tvBio.text.toString()
+        val input = android.widget.EditText(requireContext()).apply {
+            setText(currentBio)
+            setSelection(currentBio.length)
+            hint = "请输入一句话介绍自己"
+            textSize = 14f
+            minLines = 2
+            maxLines = 4
+        }
+        
+        android.app.AlertDialog.Builder(requireContext())
+            .setTitle("编辑简介")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val newBio = input.text.toString().trim()
+                viewModel.updateBio(userId, newBio.ifEmpty { null })
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /**
+     * 观察 ViewModel 数据
+     */
+    private fun observeViewModel() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // 观察用户信息
+                viewModel.user.collect { user ->
+                    user?.let { updateUserInfo(it) }
+                }
+            }
+        }
+    }
+
+    /**
+     * 更新用户信息 UI
+     */
+    private fun updateUserInfo(user: com.ucw.beatu.business.user.domain.model.User) {
+        tvUsername.text = user.name
+        tvBio.text = user.bio ?: ""
+        
+        // 格式化数字显示
+        tvLikesCount.text = formatCount(user.likesCount)
+        tvFollowingCount.text = formatCount(user.followingCount)
+        tvFollowersCount.text = formatCount(user.followersCount)
+        
+        // 加载头像
+        user.avatarUrl?.let { avatarPath ->
+            loadAvatar(avatarPath)
+        }
+        
+        // 确保点击监听器仍然有效（数据更新后重新设置）
+        tvUsername.isClickable = true
+        tvUsername.isFocusable = true
+        tvBio.isClickable = true
+        tvBio.isFocusable = true
+    }
+    
+    /**
+     * 加载头像
+     */
+    private fun loadAvatar(avatarPath: String) {
+        try {
+            val file = File(avatarPath)
+            if (file.exists()) {
+                val bitmap = BitmapFactory.decodeFile(avatarPath)
+                ivAvatar.setImageBitmap(bitmap)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * 格式化数字显示（如：5.6万）
+     */
+    private fun formatCount(count: Long): String {
+        return when {
+            count >= 100000000 -> String.format("%.1f亿", count / 100000000.0)
+            count >= 10000 -> String.format("%.1f万", count / 10000.0)
+            count >= 1000 -> String.format("%.1f千", count / 1000.0)
+            else -> count.toString()
+        }
+    }
+
+    /**
+     * 初始化标签切换
+     */
+    private fun initTabs(view: View) {
+        tabWorks = view.findViewById(R.id.tab_works)
+        tabCollections = view.findViewById(R.id.tab_collections)
+        tabLikes = view.findViewById(R.id.tab_likes)
+        tabHistory = view.findViewById(R.id.tab_history)
+
+        // 显式设置其他标签为未选中状态
+        updateTabState(tabCollections, false)
+        updateTabState(tabLikes, false)
+        updateTabState(tabHistory, false)
+
+        // 默认选中"作品"
+        selectedTab = tabWorks
+        updateTabState(tabWorks, true)
+        
+        // 设置点击监听
+        tabWorks.setOnClickListener { switchTab(it as TextView, 0) }
+        tabCollections.setOnClickListener { switchTab(it as TextView, 1) }
+        tabLikes.setOnClickListener { switchTab(it as TextView, 2) }
+        tabHistory.setOnClickListener { switchTab(it as TextView, 3) }
+    }
+    
+    /**
+     * 切换标签
+     */
+    private fun switchTab(tab: TextView, index: Int) {
+        if (selectedTab == tab) return
+
+        // 更新之前选中的标签
+        selectedTab?.let { updateTabState(it, false) }
+
+        // 更新新选中的标签
+        selectedTab = tab
+        updateTabState(tab, true)
+
+        // 当前阶段所有 Tab 都展示同一份作品数据
+        worksAdapter.submitList(allWorks.toList())
+    }
+    
+    /**
+     * 更新标签状态
+     */
+    private fun updateTabState(tab: TextView, isSelected: Boolean) {
+        if (isSelected) {
+            tab.setBackgroundColor(0xFFFF0000.toInt()) // 红色
+            tab.setTextColor(0xFFFFFFFF.toInt())       // 白字
+        } else {
+            tab.setBackgroundColor(0x00000000.toInt()) // 透明背景
+            tab.setTextColor(0x80FFFFFF.toInt())       // 白色 50% 透明
+        }
     }
 
     /**
      * 设置头像圆角裁剪（使用 post 解决宽高=0 的问题）
      */
     private fun setupAvatarRoundCorner(view: View) {
-        val avatarImageView = view.findViewById<ImageView>(R.id.iv_avatar)
-
-        avatarImageView.post {
-            val size = avatarImageView.width.coerceAtMost(avatarImageView.height)
-            avatarImageView.outlineProvider = object : ViewOutlineProvider() {
+        ivAvatar.post {
+            val size = ivAvatar.width.coerceAtMost(ivAvatar.height)
+            ivAvatar.outlineProvider = object : ViewOutlineProvider() {
                 override fun getOutline(v: View, outline: Outline) {
                     outline.setOval(0, 0, size, size)
                 }
             }
-            avatarImageView.clipToOutline = true
+            ivAvatar.clipToOutline = true
         }
     }
 
     /**
-     * 初始化作品列表
+     * 设置头像点击上传功能
      */
-    private fun initWorksList(view: View) {
-        recyclerView = view.findViewById(R.id.rv_works)
-
-        recyclerView.layoutManager = GridLayoutManager(context, 3)
-
-        // 🚀 性能优化：关闭 nested scroll，避免卡顿
-        recyclerView.isNestedScrollingEnabled = false
-
-        adapter = UserWorksAdapter(getMockWorksData())
-        recyclerView.adapter = adapter
-    }
-
-    /**
-     * 加载用户数据（假数据）
-     */
-    private fun loadUserData() {
-        // TODO: 从 ViewModel 或 Repository 加载真实数据
-    }
-
-    /**
-     * 获取假数据
-     */
-    private fun getMockWorksData(): List<WorkItem> {
-        return List(20) { index ->
-            WorkItem(
-                title = "作品$index",
-                thumbnailUrl = "https://picsum.photos/300/300?random=$index"
-            )
+    private fun setupAvatarUpload() {
+        ivAvatar.setOnClickListener {
+            openImagePicker()
         }
     }
 
     /**
-     * 数据模型
+     * 打开图片选择器
      */
-    data class WorkItem(
-        val title: String,
-        val thumbnailUrl: String
-    )
+    private fun openImagePicker() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        intent.type = "image/*"
+        pickImageLauncher.launch(intent)
+    }
 
     /**
-     * 作品列表 Adapter
+     * 处理图片选择结果
      */
-    private class UserWorksAdapter(
-        private val works: List<WorkItem>
-    ) : RecyclerView.Adapter<UserWorksAdapter.WorkViewHolder>() {
+    private fun handleImageSelection(uri: Uri) {
+        try {
+            // 读取图片
+            val inputStream = requireContext().contentResolver.openInputStream(uri)
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): WorkViewHolder {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_user_work, parent, false)
-            return WorkViewHolder(view)
+            // 保存到本地文件
+            val avatarFile = saveAvatarToLocal(bitmap)
+            if (avatarFile != null) {
+                // 更新数据库
+                viewModel.updateAvatar(userId, avatarFile.absolutePath)
+                
+                // 更新 UI
+                ivAvatar.setImageBitmap(bitmap)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
+    }
 
-        override fun onBindViewHolder(holder: WorkViewHolder, position: Int) {
-            holder.bind(works[position])
+    /**
+     * 保存头像到本地文件
+     */
+    private fun saveAvatarToLocal(bitmap: Bitmap): File? {
+        return try {
+            // 创建头像目录
+            val avatarDir = File(requireContext().filesDir, "avatars")
+            if (!avatarDir.exists()) {
+                avatarDir.mkdirs()
+            }
+
+            // 创建头像文件
+            val avatarFile = File(avatarDir, "avatar_${userId}.jpg")
+            
+            // 压缩并保存
+            val outputStream = FileOutputStream(avatarFile)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+            outputStream.flush()
+            outputStream.close()
+
+            avatarFile
+        } catch (e: IOException) {
+            e.printStackTrace()
+            null
         }
+    }
 
-        override fun getItemCount(): Int = works.size
-        //TODO 记载缩缩略图
-        class WorkViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+    companion object {
+        private const val ARG_USER_ID = "user_id"
 
-//            private val thumbnail = itemView.findViewById<ImageView>(R.id.iv_work_thumbnail)
-
-            fun bind(work: WorkItem) {
-                // 使用 Glide 加载缩略图
-//                Glide.with(itemView.context)
-//                    .load(work.thumbnailUrl)
-//                    .centerCrop()
-//                    .into(thumbnail)
+        /**
+         * 创建 Fragment 实例
+         */
+        fun newInstance(userId: String? = null): UserProfileFragment {
+            return UserProfileFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_USER_ID, userId)
+                }
             }
         }
     }
