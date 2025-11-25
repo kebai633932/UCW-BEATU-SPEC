@@ -18,6 +18,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.ucw.beatu.business.search.presentation.R
 import com.ucw.beatu.business.search.presentation.ui.widget.FlowLayout
+import com.ucw.beatu.shared.common.navigation.NavigationHelper
+import com.ucw.beatu.shared.common.navigation.NavigationIds
 
 /**
  * 搜索页面Fragment
@@ -75,6 +77,8 @@ class SearchFragment : Fragment() {
         clearButton = view.findViewById(R.id.btn_clear)
         cancelButton = view.findViewById(R.id.tv_cancel)
         scrollBeforeSearch = view.findViewById(R.id.scroll_before_search)
+        llSearchHistory = view.findViewById(R.id.ll_search_history)
+        llHotSearch = view.findViewById(R.id.ll_hot_search)
         rvSearchSuggestions = view.findViewById(R.id.rv_search_suggestions)
         rvSearchResults = view.findViewById(R.id.rv_search_results)
         emptyState = view.findViewById(R.id.empty_state)
@@ -133,11 +137,7 @@ class SearchFragment : Fragment() {
         
         // 返回按钮点击
         view.findViewById<View>(R.id.btn_back)?.setOnClickListener {
-            // 使用 Navigation 返回上一页
-            if (!findNavController().popBackStack()) {
-                // 如果无法返回，则使用 onBackPressedDispatcher
-                requireActivity().onBackPressedDispatcher.onBackPressed()
-            }
+            navigateBackToFeed()
         }
     }
 
@@ -154,6 +154,24 @@ class SearchFragment : Fragment() {
                 performSearch(tag)
             }
             llSearchHistory.addView(tagView)
+        }
+    }
+
+    /**
+     * 返回首页 Feed
+     */
+    private fun navigateBackToFeed() {
+        val navController = findNavController()
+        runCatching {
+            NavigationHelper.navigateByStringId(
+                navController,
+                NavigationIds.ACTION_SEARCH_TO_FEED,
+                requireContext()
+            )
+        }.onFailure {
+            if (!navController.popBackStack()) {
+                requireActivity().onBackPressedDispatcher.onBackPressed()
+            }
         }
     }
 
