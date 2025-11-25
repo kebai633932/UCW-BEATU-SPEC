@@ -289,6 +289,18 @@
   - 方案：在 `LandscapeViewModel` 中实现 `showExternalVideo`，完成去重、列表前插与状态更新，并复用现有缓存上限策略；同步回填测试或手动验证步骤。  
   - 指标：竖屏点击全屏后横屏页首条视频即为切换前内容且列表无重复；`./gradlew :business:landscape:presentation:compileDebugKotlin` 需在具备 JDK11+ 的环境下通过（当前开发环境仅有 JDK8，无法直接验证）。  
   - 成果：`LandscapeViewModel` 新增 `showExternalVideo`，支持外部视频去重并插入列表顶部，同时遵循 `maxCachedItems` 限制；对应 Fragment 的 `externalVideoHandled` 逻辑保持一致，编译缺失方法错误已清除。
+
+- [x] 横屏入口默认列表插入顺序修复  
+  - 2025-11-25 - done by GPT-5.1 Codex  
+  - 需求：竖屏切换横屏时传入的当前视频会在 `LandscapeViewModel.showExternalVideo` 中立即插入，但随后默认列表加载又覆盖了 state，导致横屏页重新回到 mock 列表第一个视频。需确保“加载默认列表 → 再插入外部视频”，保证切换后继续播放同一条内容。  
+  - 方案：在 `LandscapeViewModel` 中缓存待插入的视频，默认列表加载完成后统一执行插入逻辑；若列表已存在则即时插入，确保始终位于首条且不重复。  
+  - 指标：竖屏切换横屏后首条视频始终与切换前一致；`LandscapeViewModel` state 更新不再丢失外部视频；无新增 lint。
+
+- [x] Landscape 默认列表加载顺序再优化  
+  - 2025-11-25 - done by GPT-5.1 Codex  
+  - 需求：`LandscapeViewModel` 在 `init` 阶段自动调用 `loadVideoList()`，导致 Mock 列表永远先于外部 `showExternalVideo()` 执行，竖屏透传的视频依旧被覆盖。  
+  - 方案：移除 `init { loadVideoList() }`，在 `LandscapeFragment` 的 `onViewCreated()` 中先处理 `handleExternalVideoArgs()`（触发 `showExternalVideo()`）再手动调用 `loadVideoList()`，并在 `loadVideoList()` 完成后再次检测 `pendingExternalVideo` 进行插入。  
+  - 指标：实测竖屏→横屏后第一条内容始终是当前视频，即便横屏 Fragment 重建也不会回落到 Mock 列表第一个条目。
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 
 

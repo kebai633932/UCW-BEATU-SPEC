@@ -40,8 +40,8 @@ class LandscapeFragment : Fragment(R.layout.fragment_landscape) {
         shouldForcePortraitOnExit = originalOrientation == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         requireActivity().requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
-        setupViews(view)
         handleExternalVideoArgs()
+        setupViews(view)
         observeUiState()
         setupBackPressed()
 

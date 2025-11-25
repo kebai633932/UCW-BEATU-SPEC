@@ -30,10 +30,9 @@ class LandscapeViewModel @Inject constructor(
     private var currentPage = 1
     private val pageSize = 5
     private val maxCachedItems = 40
-
-    init {
-        loadVideoList()
-    }
+    private var pendingExternalVideo: VideoItem? = null
+    private var shouldReapplyExternalVideo = false
+    private var isDefaultListLoading = false
 
     /**
      * 加载第一页 Mock 数据
@@ -41,6 +40,7 @@ class LandscapeViewModel @Inject constructor(
     fun loadVideoList() {
         viewModelScope.launch {
             currentPage = 1
+            isDefaultListLoading = true
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             val mockVideos = MockVideoCatalog.getPage(LANDSCAPE, currentPage, pageSize)
                 .map { it.toLandscapeVideoItem() }
@@ -49,6 +49,8 @@ class LandscapeViewModel @Inject constructor(
                 isLoading = false,
                 error = null
             )
+            isDefaultListLoading = false
+            applyPendingExternalVideo(forceInsert = false)
         }
     }
 
@@ -74,22 +76,45 @@ class LandscapeViewModel @Inject constructor(
      */
     fun showExternalVideo(videoItem: VideoItem) {
         viewModelScope.launch {
-            val sanitized = videoItem.copy(orientation = VideoOrientation.LANDSCAPE)
-            val mutableList = _uiState.value.videoList.toMutableList().apply {
-                val existingIndex = indexOfFirst { it.id == sanitized.id }
-                if (existingIndex >= 0) {
-                    removeAt(existingIndex)
-                }
-                add(0, sanitized)
-                while (size > maxCachedItems) {
-                    removeAt(lastIndex)
+            pendingExternalVideo = videoItem.copy(orientation = VideoOrientation.LANDSCAPE)
+            shouldReapplyExternalVideo = isDefaultListLoading || _uiState.value.videoList.isEmpty()
+            applyPendingExternalVideo(forceInsert = true)
+            if (!shouldReapplyExternalVideo) {
+                pendingExternalVideo = null
+            }
+        }
+    }
+
+    /**
+     * 将待插入的外部视频放到列表首位。
+     * @param forceInsert 当默认列表尚未加载完成但需要立即展示时强制插入
+     */
+    private fun applyPendingExternalVideo(forceInsert: Boolean) {
+        val external = pendingExternalVideo ?: return
+        val currentList = _uiState.value.videoList
+        if (currentList.isEmpty() && !forceInsert) {
+            // 等待默认列表加载完成后再插入
+            return
+        }
+
+        val mergedList = buildList {
+            add(external)
+            currentList.forEach { item ->
+                if (item.id != external.id) {
+                    add(item)
                 }
             }
-            _uiState.value = _uiState.value.copy(
-                videoList = mutableList,
-                isLoading = false,
-                error = null
-            )
+        }.take(maxCachedItems)
+
+        _uiState.value = _uiState.value.copy(
+            videoList = mergedList,
+            isLoading = false,
+            error = null
+        )
+
+        if (!forceInsert || !shouldReapplyExternalVideo) {
+            pendingExternalVideo = null
+            shouldReapplyExternalVideo = false
         }
     }
 
