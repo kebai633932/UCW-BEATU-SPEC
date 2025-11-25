@@ -45,6 +45,7 @@ class VideoItemFragment : Fragment() {
     private var playerView: PlayerView? = null
     private var playButton: View? = null
     private var videoItem: VideoItem? = null
+    private var hasPreparedPlayer = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,12 +111,7 @@ class VideoItemFragment : Fragment() {
             openLandscapeMode()
         }
         
-        // 延迟加载视频，确保视图完全初始化
-        view.post {
-            if (isAdded && viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.INITIALIZED)) {
-                loadVideo()
-            }
-        }
+        // 播放逻辑交由生命周期驱动，只在真正可见时启动
     }
     
     private fun observeViewModel() {
@@ -141,45 +137,59 @@ class VideoItemFragment : Fragment() {
         }
     }
     
-    private fun loadVideo() {
-        if (!isAdded || view == null || playerView == null || videoItem == null) {
-            Log.w(TAG, "Fragment not ready, skip loading video")
+    private fun startPlaybackIfNeeded(forcePrepare: Boolean = false) {
+        if (!isAdded || playerView == null || videoItem == null) {
+            Log.w(TAG, "Fragment not ready, skip startPlayback")
             return
         }
-        
-        try {
-            val item = videoItem!!
-            Log.d(TAG, "Loading video: ${item.id} - ${item.videoUrl}")
-            
-            playerView?.let { pv ->
-                viewModel.playVideo(item.id, item.videoUrl)
-                viewModel.preparePlayer(item.id, item.videoUrl, pv)
-            } ?: run {
-                Log.e(TAG, "PlayerView is null, cannot load video")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading video", e)
+
+        if (!hasPreparedPlayer || forcePrepare) {
+            prepareAndPlay()
+        } else {
+            viewModel.resume()
+        }
+    }
+
+    private fun prepareAndPlay() {
+        val item = videoItem ?: return
+        val pv = playerView ?: return
+
+        Log.d(TAG, "Preparing video for playback: ${item.id}")
+        viewModel.playVideo(item.id, item.videoUrl)
+        viewModel.preparePlayer(item.id, item.videoUrl, pv)
+        hasPreparedPlayer = true
+    }
+
+    /**
+     * 供父级 Fragment/Activity 控制可见性时调用
+     */
+    fun onParentVisibilityChanged(isVisible: Boolean) {
+        if (isVisible) {
+            startPlaybackIfNeeded()
+        } else if (hasPreparedPlayer) {
+            viewModel.pause()
         }
     }
     
     override fun onPause() {
         super.onPause()
-        viewModel.pause()
+        if (hasPreparedPlayer) {
+            viewModel.pause()
+        }
     }
     
     override fun onResume() {
         super.onResume()
-        // 如果视频已加载，恢复播放
-        if (isAdded && viewModel.uiState.value.currentVideoId != null) {
-            viewModel.resume()
-        }
+        startPlaybackIfNeeded()
     }
     
     override fun onDestroyView() {
         super.onDestroyView()
+        playerView?.player = null
         viewModel.releaseCurrentPlayer()
         playerView = null
         playButton = null
+        hasPreparedPlayer = false
     }
 
     private fun openLandscapeMode() {

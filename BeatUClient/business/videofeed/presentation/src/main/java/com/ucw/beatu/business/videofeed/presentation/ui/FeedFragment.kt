@@ -19,6 +19,7 @@ class FeedFragment : Fragment(), FeedFragmentCallback {
 
     private lateinit var viewPager: ViewPager2
     private var currentPage = 1 // 默认显示推荐页面（索引1）
+    private var recommendFragment: RecommendFragment? = null
     
     // MainActivity 引用（用于更新指示器）
     private var mainActivity: MainActivityBridge? = null
@@ -72,8 +73,17 @@ class FeedFragment : Fragment(), FeedFragmentCallback {
                 currentPage = position
                 // 通知 MainActivity 更新 Tab 选中状态
                 mainActivity?.updateTabSelection(position)
+                notifyRecommendVisibility(position == 1)
             }
         })
+    }
+
+    private fun notifyRecommendVisibility(isVisible: Boolean) {
+        val target = recommendFragment ?: childFragmentManager.fragments
+            .filterIsInstance<RecommendFragment>()
+            .firstOrNull()
+            ?.also { recommendFragment = it }
+        target?.onParentTabVisibilityChanged(isVisible)
     }
     
     /**
@@ -109,13 +119,13 @@ class FeedFragment : Fragment(), FeedFragmentCallback {
     /**
      * ViewPager2的适配器
      */
-    private class TabPagerAdapter(fragmentActivity: FragmentActivity) : FragmentStateAdapter(fragmentActivity) {
+    private inner class TabPagerAdapter(fragmentActivity: FragmentActivity) : FragmentStateAdapter(fragmentActivity) {
         override fun getItemCount(): Int = 2 // 关注和推荐两个页面
         
         override fun createFragment(position: Int): Fragment {
             return when (position) {
                 0 -> FollowFragment()
-                1 -> RecommendFragment()
+                1 -> RecommendFragment().also { recommendFragment = it }
                 else -> throw IllegalArgumentException("Invalid position: $position")
             }
         }

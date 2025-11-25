@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import androidx.core.view.GestureDetectorCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
@@ -38,6 +39,7 @@ class RecommendFragment : Fragment() {
     private var viewPager: ViewPager2? = null
     private var adapter: VideoFeedAdapter? = null
     private var isRefreshing = false
+    private var pendingResumeRequest = false
     
     // 左滑手势检测
     private var gestureDetector: GestureDetectorCompat? = null
@@ -99,6 +101,27 @@ class RecommendFragment : Fragment() {
         // 观察 ViewModel 状态
         observeViewModel()
     }
+
+    fun onParentTabVisibilityChanged(isVisible: Boolean) {
+        if (isVisible) {
+            if (viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                resumeVisibleVideoItem()
+            } else {
+                pendingResumeRequest = true
+            }
+        } else {
+            pauseAllVideoItems()
+            pendingResumeRequest = false
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (pendingResumeRequest) {
+            resumeVisibleVideoItem()
+            pendingResumeRequest = false
+        }
+    }
     
     /**
      * 设置下拉刷新功能
@@ -157,17 +180,6 @@ class RecommendFragment : Fragment() {
             }
         }
     }
-    
-    override fun onPause() {
-        super.onPause()
-        // ViewPager2 中的 Fragment 会自己处理生命周期
-    }
-    
-    override fun onResume() {
-        super.onResume()
-        // ViewPager2 中的 Fragment 会自己处理生命周期
-    }
-    
     /**
      * 设置左滑手势检测
      * 当用户在推荐页左滑时，跳转到个人主页
@@ -244,6 +256,20 @@ class RecommendFragment : Fragment() {
         adapter = null
         gestureDetector = null
         rootView = null
+        pendingResumeRequest = false
+    }
+
+    private fun pauseAllVideoItems() {
+        childFragmentManager.fragments
+            .filterIsInstance<VideoItemFragment>()
+            .forEach { it.onParentVisibilityChanged(false) }
+    }
+
+    private fun resumeVisibleVideoItem() {
+        childFragmentManager.fragments
+            .filterIsInstance<VideoItemFragment>()
+            .firstOrNull { it.isVisible }
+            ?.onParentVisibilityChanged(true)
     }
 }
 

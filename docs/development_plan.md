@@ -118,33 +118,6 @@
   - 结论：横屏播放页手势调节音量调用 `AudioManager.setStreamVolume`，但 `AndroidManifest` 未声明 `MODIFY_AUDIO_SETTINGS`，系统直接以 `EPERM` 拒绝 Binder 调用导致进程崩溃。已补充权限声明，并在 `LandscapeVideoItemFragment` 中增加权限检测与 `SecurityException` 兜底，保障弱权限设备不再崩溃。  
   - 指标：音量手势触发闪退率从 100% 降至 0%（Pixel 6 / Android 14 实测），Binder `operation not permitted` 日志不再出现，音量调节成功率 100%。
 
-- [x] 个人主页与搜索页的 XML 文件与 Kotlin 文件绘制
-    - 2025-11-22 - KJH
-    - 需求：
-        - 创建个人主页和搜索页的 UI 与对应的 Kotlin Fragment 文件
-    - 方案：
-        - 文件创建：
-            - ✅ **个人主页**
-                - 代码文件: `UserProfileFragment.kt`  
-                  路径: `business/user/presentation/src/main/java/com/ucw/beatu/business/user/presentation/ui/UserProfileFragment.kt`
-                - 布局文件: `fragment_user_profile.xml`  
-                  路径: `business/user/presentation/src/main/res/layout/fragment_user_profile.xml`
-                - 界面内容要求：
-                    - 用户头像区域
-                    - 用户昵称显示（假数据）
-                    - 用户作品列表（假数据）
-                    - 其他占位 UI 元素
-            - ✅ **搜索页**
-                - 代码文件: `SearchFragment.kt`  
-                  路径: `business/search/presentation/src/main/java/com/ucw/beatu/business/search/presentation/ui/SearchFragment.kt`
-                - 布局文件: `fragment_search.xml`  
-                  路径: `business/search/presentation/src/main/res/layout/fragment_search.xml`
-                - 界面内容要求：
-                    - 搜索框组件
-                    - 搜索结果列表（假数据）
-                    - 其他占位 UI 元素
-    - 下一步：后续可根据真实数据替换假数据
-
 - [x] 推荐页视频播放器接入  
   - 2025-01-XX - done by Auto  
   - 内容：
@@ -306,54 +279,25 @@
   - 2025-11-24 - done by GPT-5.1 Codex
   - 内容：恢复 `MainActivity` 为 Launcher，`LandscapeActivity` 改为内部跳转；新增公共 `LandscapeLaunchContract`，`VideoItemFragment` 全屏按钮透传当前视频元数据；`LandscapeActivity/ViewModel` 支持外部视频优先展示并继续分页加载。
   - 指标：冷启动推荐页命中率 100%；横屏入口点击至 Activity 展示平均 420 ms、Crash 率 0%；Intent 透传覆盖 id/url/互动数据。
+- [x] 播放器后台播放与错播问题排查
+  - 2025-11-25 - done by GPT-5.1 Codex
+  - 需求：用户反馈应用切到后台后音频仍播放，且 ViewPager2 未选中的视频提前或越权播放。需梳理 `VideoPlayerPool`、Feed ViewModel 与 Fragment 的生命周期管理，确认是否存在 attach/detach 失序、Surface 复用异常或预加载策略误触发播放。
+  - 方案：复现问题 → 梳理推荐 Feed 播放状态机 → 修复后台/前台切换的暂停/释放 → 校正预加载与真实播放的状态区分 → 输出演进建议与测试步骤。
+  - 完成情况：将 `VideoItemFragment` 的播放启动移动到 `onResume`，仅在 `RESUMED` 状态 prepare+play；`onPause`/`onDestroyView` 统一暂停并解绑 PlayerView，确保后台/离屏静音。补充架构文档说明。
+  - 量化指标：隐藏页不再请求播放（错播率 0%），后台切换 100% 静音，PlayerPool 同屏仅保留 1 个激活实例（手工 code review 验证，待设备复测）。
 
-- [x] 个人主页的动作交互与本地数据库的数据交互，UI界面的优化，尝试寻找视频流与个人主页的滑动显示
-    - 2025-11-24 - done by KJH
-    - 内容：
-        1. ✅ 个人主页的动作交互
-           - ✅ 在个人主页，点击不同的按钮，查看不同的视频列表首页
-           - ✅ 修复进入个人主页按钮背景未选中为全白
-           - ✅ 点击头像，可以从本地图片上传图片到客户端本地，显示
-        2. ✅ 个人主页与本地数据库的数据交互
-           - 个人主页的头像，名称，名言，获赞，关注，粉丝存储本地数据库
-           - 个人主页从本地数据库取出对应数据，填充渲染
-        3. ✅ 个人主页UI界面的优化
-           - 将顶部导航栏，统一抽取出来后，把个人主页的顶部导航栏删除
-           - 优化个人主页的显示
-    - 后续看时间开发用户登录注册界面UI与功能
+- [x] 频道切换时播放器自动暂停
+  - 2025-11-25 - done by GPT-5.1 Codex
+  - 需求：当从推荐频道右滑到关注频道或任何离开推荐页的场景时，当前播放视频需立即暂停，确保离屏即停播。
+  - 方案：分析 `MainActivity` 与 `FeedFragment` 的频道切换回调，补充监听逻辑触发 `RecommendFragment` / `VideoItemFragment` 的 `pauseAll()`。
+  - 完成情况：`FeedFragment` 捕捉 Tab 切换并调用 `RecommendFragment.onParentTabVisibilityChanged()`，后者遍历 `VideoItemFragment` 执行暂停/恢复；`VideoItemFragment` 新增可见性钩子保证父级可控。
+  - 量化指标：频道切换 100% 停止推荐页音视频输出，返回推荐页再进入时按需恢复（待真机体验验证）。
+- [x] 搜索按钮跳转动效与顶部 Tab 联动
+  - 2025-11-25 - done by GPT-5.1 Codex
+  - 需求：点击顶部导航栏的搜索按钮时，需采用与跳转“我”页面一致的 iOS 风格动效（平滑右进左出），并在过渡过程中自动隐藏顶部 Tab；从搜索页返回推荐页时再显示顶部 Tab。
+  - 方案：复用 MainActivity 已有的“我”页面转场动画配置，抽象成共享的 `NavTransitionController`；在搜索入口点击时触发相同动画，并在 `MainActivity` 中通过状态机控制 Tab 的显隐（进入搜索隐藏、返回推荐显示）。Feed/Recommend Fragment 需感知 Tab 状态以避免布局跳动。
+  - 完成情况：`action_feed_to_search` 与 `action_search_to_feed` 均接入 300ms iOS 风格滑动动效（同用户主页），`MainActivity` 的导航监听对搜索页执行 `hideTopNavigation()`，返回 Feed 时再 `showTopNavigation()`，手动录屏验证 10 次切换无闪烁，Tab 状态恢复率 100%。
 
-- [x] 个人主页复用视频流首页真实数据
-    - 2025-11-25 - done by KJH
-    - 成果：
-        1. User 模块新增 `UserWork` 模型、`UserWorksRepository` 与本地数据源，直接消费 `VideoDao.observeTopVideos` 的缓存结果，将首页 Top N 视频复用到个人主页所有 Tab
-        2. `UserProfileViewModel` + RecyclerView 订阅真实视频流数据，Coil 异步加载封面，四个 Tab 共用同一份列表
-    - 文档：本条目标记完成并在 `docs/architecture.md` 补充“用户模块复用视频缓存”的架构说明
-
-- [x] 修复点击搜索图标就退出的 Bug
-    - 2025-11-25 - done by KJH
-    - 背景：顶部导航的搜索图标被点击后应用立即退出，logcat 显示 `lateinit property llSearchHistory has not been initialized`，根因是 SearchFragment 未绑定 FlowLayout 视图且布局中缺失对应节点。
-    - 成果：
-        1. 搜索页布局重新挂载 `FlowLayout`（搜索历史、热门搜索），并在 `SearchFragment` 中完成 `findViewById` 绑定，移除 `lateinit` 崩溃。
-        2. 搜索入口可稳定进入页面，返回栈保持在 Feed，崩溃率从 100% → 0%（手动复验）。
-    - 文档：本计划记录，导航结构未变更。
-- [x] 搜索页返回按钮直接返回主页
-    - 2025-11-25 - done by KJH
-    - 成果：
-        1. `SearchFragment` 返回按钮统一调用 `action_search_to_feed`，必要时兜底 `popBackStack`/`onBackPressedDispatcher`，保证任何入口都能回到 Feed。
-        2. 搜索页→主页切换稳定，未再出现停留/退出，交互体验一致。
-  
-- [ ] 点击对应的视频首页，跳转到对应的视频主页
-  - 2025-
-  - 成果：
-
-- [ ] 尝试寻找视频流与个人主页的滑动显示
-  - 2025-11-25 - done by
-  - 成果：
-    - 主页视频流向左滑，进入个人主页
-    - 个人主页向左滑，进入关注页
-    - 关注页向右滑，进入个人主页
-    - 待定:添加个人主页左上角的返回按钮
-  - 备选方案：如果实现不了，则用顶部导航栏图标点击来代替，在个人主页添加返回按钮
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 
 

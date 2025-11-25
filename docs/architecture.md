@@ -78,12 +78,15 @@ Data Layer (RemoteDataSource + LocalCache + PlayerDataSource)
 - PlayerPool：默认 2 个实例（当前+下一个），根据设备性能扩展到 3 个。利用 `ViewPager2` 的 `setOffscreenPageLimit(1)` 触发下一条预加载。
 - 预加载：借助 `CacheDataSource` 在后台拉取 N+1 前 1–2 MB，结合封面图实现首帧 < 500 ms。
 - 监控：`core/common/metrics` 记录 FPS、首帧时间、播放成功率、卡顿率、冷启动。数据上报到 `BeatUObservability`。
+- ViewPager2 子 Fragment 仅在 `RESUMED` 状态才会真正 `prepare+play` 播放器；离屏 Fragment 保持暂停并把 PlayerView 脱附，避免后台/错播。`onPause` 必定调用 `VideoPlayer.pause()`，`onDestroyView` 将 `PlayerView.player=null` 并把实例归还 `VideoPlayerPool`，保证同屏仅一条音画输出。
+- 应用层顶部导航（MainActivity）在频道切换时，通过 `FeedFragment` 将推荐页 Fragment 的可见性事件下沉到 `RecommendFragment`/`VideoItemFragment`，保证“离开频道即暂停、回到频道再恢复”，杜绝关注页可见时仍播放推荐视频的跨频道串音。
 
 ### 5. 交互层设计
 
 - `feature/feed`：负责竖屏主场景，包含手势检测（单击、双击、长按、上下/左右滑）、播控面板状态机、评论弹层。
 - `feature/landscape`：横屏模式路由，可由 Feed 或系统旋转触发，包含亮度/音量/快进手势、防误触锁、倍速/清晰度菜单。
 - `feature/profile`：Feed 作者头像跳转、关注状态同步、作品/收藏/点赞列表。
+- `MainActivity` 顶部导航栏作为全局容器：通过 `TabIndicatorView` 与 FeedFragment 的 `MainActivityBridge` 保持同步，进入“我”或“搜索”等二级页面时会以 300ms iOS 风格滑动动画（右进左出）切换，并伴随顶部 Tab 平滑隐藏/返回推荐页时再显示，避免 Feed 内容高度突变。
 
 ### 6. AI 数据流
 
