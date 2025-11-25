@@ -3,8 +3,10 @@ package com.ucw.beatu.business.landscape.presentation.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.ucw.beatu.business.landscape.presentation.model.LandscapeMockVideoProvider
 import com.ucw.beatu.business.landscape.presentation.model.VideoItem
+import com.ucw.beatu.shared.common.mock.MockVideoCatalog
+import com.ucw.beatu.shared.common.mock.MockVideoCatalog.Orientation.LANDSCAPE
+import com.ucw.beatu.shared.common.mock.Video
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +41,8 @@ class LandscapeViewModel @Inject constructor(
         viewModelScope.launch {
             currentPage = 1
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            val mockVideos = LandscapeMockVideoProvider.getPage(currentPage, pageSize)
+            val mockVideos = MockVideoCatalog.getPage(LANDSCAPE, currentPage, pageSize)
+                .map { it.toLandscapeVideoItem() }
             _uiState.value = _uiState.value.copy(
                 videoList = mockVideos,
                 isLoading = false,
@@ -54,7 +57,8 @@ class LandscapeViewModel @Inject constructor(
     fun loadMoreVideos() {
         viewModelScope.launch {
             currentPage++
-            val moreMockVideos = LandscapeMockVideoProvider.getPage(currentPage, pageSize)
+            val moreMockVideos = MockVideoCatalog.getPage(LANDSCAPE, currentPage, pageSize)
+                .map { it.toLandscapeVideoItem() }
             val mergedList = (_uiState.value.videoList + moreMockVideos)
                 .takeLast(maxCachedItems)
             _uiState.value = _uiState.value.copy(
@@ -63,6 +67,22 @@ class LandscapeViewModel @Inject constructor(
             )
         }
     }
+
+    private fun Video.toLandscapeVideoItem(): VideoItem =
+        VideoItem(
+            id = id,
+            videoUrl = url,
+            title = title,
+            authorName = author,
+            likeCount = likeCount,
+            commentCount = commentCount,
+            favoriteCount = favoriteCount,
+            shareCount = shareCount,
+            orientation = when (orientation) {
+                MockVideoCatalog.Orientation.PORTRAIT -> com.ucw.beatu.business.landscape.presentation.model.VideoOrientation.PORTRAIT
+                MockVideoCatalog.Orientation.LANDSCAPE -> com.ucw.beatu.business.landscape.presentation.model.VideoOrientation.LANDSCAPE
+            }
+        )
 }
 
 // 移到文件顶层！让外部（Activity/Adapter）能访问

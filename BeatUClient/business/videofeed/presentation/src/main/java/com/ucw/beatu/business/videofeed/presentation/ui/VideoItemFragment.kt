@@ -1,5 +1,6 @@
 package com.ucw.beatu.business.videofeed.presentation.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -14,6 +15,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.ui.PlayerView
 import com.ucw.beatu.business.videofeed.presentation.R
 import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
+import com.ucw.beatu.business.videofeed.presentation.model.VideoOrientation
 import com.ucw.beatu.business.videofeed.presentation.viewmodel.VideoItemViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -28,6 +30,9 @@ class VideoItemFragment : Fragment() {
     companion object {
         private const val TAG = "VideoItemFragment"
         private const val ARG_VIDEO_ITEM = "video_item"
+        private const val LANDSCAPE_ACTIVITY_COMPONENT =
+            "com.ucw.beatu.business.landscape.presentation.ui.LandscapeActivity"
+        private const val EXTRA_START_VIDEO_ID = "extra_start_video_id"
 
         fun newInstance(videoItem: VideoItem): VideoItemFragment {
             return VideoItemFragment().apply {
@@ -42,6 +47,7 @@ class VideoItemFragment : Fragment() {
     
     private var playerView: PlayerView? = null
     private var playButton: View? = null
+    private var switchLandscapeButton: View? = null
     private var videoItem: VideoItem? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,6 +74,7 @@ class VideoItemFragment : Fragment() {
         // 初始化视图
         playerView = view.findViewById(R.id.player_view)
         playButton = view.findViewById(R.id.iv_play_button)
+        switchLandscapeButton = view.findViewById(R.id.btn_switch_landscape)
         
         // 更新视频信息
         videoItem?.let { item ->
@@ -77,6 +84,13 @@ class VideoItemFragment : Fragment() {
             view.findViewById<android.widget.TextView>(R.id.tv_comment_count)?.text = item.commentCount.toString()
             view.findViewById<android.widget.TextView>(R.id.tv_favorite_count)?.text = item.favoriteCount.toString()
             view.findViewById<android.widget.TextView>(R.id.tv_share_count)?.text = item.shareCount.toString()
+            if (item.orientation == VideoOrientation.LANDSCAPE) {
+                switchLandscapeButton?.visibility = View.VISIBLE
+                switchLandscapeButton?.setOnClickListener { openLandscapePlayer(item) }
+            } else {
+                switchLandscapeButton?.visibility = View.GONE
+                switchLandscapeButton?.setOnClickListener(null)
+            }
         }
         
         // 观察 ViewModel 状态
@@ -105,7 +119,7 @@ class VideoItemFragment : Fragment() {
         }
         
         view.findViewById<View>(R.id.iv_fullscreen)?.setOnClickListener {
-            // TODO: 全屏播放
+            videoItem?.let { openLandscapePlayer(it) }
         }
         
         // 延迟加载视频，确保视图完全初始化
@@ -178,6 +192,19 @@ class VideoItemFragment : Fragment() {
         viewModel.releaseCurrentPlayer()
         playerView = null
         playButton = null
+        switchLandscapeButton = null
+    }
+
+    private fun openLandscapePlayer(item: VideoItem) {
+        val intent = Intent().apply {
+            setClassName(requireContext(), LANDSCAPE_ACTIVITY_COMPONENT)
+            putExtra(EXTRA_START_VIDEO_ID, item.id)
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Unable to launch LandscapeActivity", e)
+        }
     }
 }
 

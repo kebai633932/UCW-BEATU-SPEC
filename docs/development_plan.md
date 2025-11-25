@@ -236,7 +236,7 @@
 
 - [x] Landscape 横屏页 Mock 数据提供器 + 缓存保护  
   - 2025-11-24 - done by GPT-5.1 Codex  
-  - 内容：新增 `LandscapeMockVideoProvider` 统一维护横屏播放器 Demo 视频列表，并在 `LandscapeViewModel` 中通过分页接口获取假数据、限制缓存数量，避免 `notifyDataSetChanged` 式全量替换导致的内存膨胀。为每页生成唯一 `id` 和动态统计字段，后续替换真实数据时只需更换 Provider/Repository。
+  - 内容：新增共享 `MockVideoCatalog`（`shared/common`）集中维护横屏/竖屏 Demo 视频列表，`LandscapeViewModel` 和 `RecommendViewModel` 统一通过分页接口获取假数据，并在横屏侧限制缓存数量，避免 `notifyDataSetChanged` 式全量替换导致的内存膨胀。为每页生成唯一 `id` 和动态统计字段，后续替换真实数据时只需更换 Provider/Repository。
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 

@@ -35,12 +35,16 @@ class LandscapeActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "LandscapeActivity"
+        const val EXTRA_START_VIDEO_ID = "extra_start_video_id"
+        private const val STATE_CURRENT_INDEX = "state_current_index"
     }
 
     private lateinit var viewPager: ViewPager2
     private lateinit var adapter: LandscapeVideoAdapter
     private lateinit var viewModel: LandscapeViewModel
     private var exitButton: ImageButton? = null
+    private var pendingVideoId: String? = null
+    private var pendingIndex: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +69,14 @@ class LandscapeActivity : AppCompatActivity() {
         }
         
         setContentView(R.layout.activity_landscape)
+
+        pendingVideoId = intent.getStringExtra(EXTRA_START_VIDEO_ID)
+        if (savedInstanceState != null) {
+            pendingIndex = savedInstanceState.getInt(STATE_CURRENT_INDEX, -1).takeIf { it >= 0 }
+            if (pendingVideoId == null) {
+                pendingVideoId = savedInstanceState.getString(EXTRA_START_VIDEO_ID)
+            }
+        }
         
         // 初始化 ViewModel
         viewModel = ViewModelProvider(this)[LandscapeViewModel::class.java]
@@ -107,10 +119,26 @@ class LandscapeActivity : AppCompatActivity() {
                 viewModel.uiState.collect { state: com.ucw.beatu.business.landscape.presentation.viewmodel.LandscapeUiState ->
                     if (state.videoList.isNotEmpty()) {
                         adapter.updateVideoList(state.videoList)
+                        scrollToPendingPosition(state)
                     }
                 }
             }
         }
+    }
+
+    private fun scrollToPendingPosition(state: com.ucw.beatu.business.landscape.presentation.viewmodel.LandscapeUiState) {
+        val targetIndex = when {
+            pendingVideoId != null -> state.videoList.indexOfFirst { it.id == pendingVideoId }
+            pendingIndex != null -> pendingIndex!!
+            else -> -1
+        }
+        if (targetIndex in 0 until adapter.itemCount) {
+            viewPager.post {
+                viewPager.setCurrentItem(targetIndex, false)
+            }
+        }
+        pendingVideoId = null
+        pendingIndex = null
     }
     
     @Deprecated("Deprecated in Java")
@@ -118,5 +146,19 @@ class LandscapeActivity : AppCompatActivity() {
         super.onBackPressed()
         // 退出横屏模式
         finish()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(STATE_CURRENT_INDEX, viewPager.currentItem)
+        pendingVideoId?.let { outState.putString(EXTRA_START_VIDEO_ID, it) }
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        pendingIndex = savedInstanceState.getInt(STATE_CURRENT_INDEX, -1).takeIf { it >= 0 }
+        if (pendingVideoId == null) {
+            pendingVideoId = savedInstanceState.getString(EXTRA_START_VIDEO_ID)
+        }
     }
 }

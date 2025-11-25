@@ -44,9 +44,6 @@ dependencies {
     // Business Data
     implementation(project(":business:landscape:data"))
     
-    // Business Presentation (for VideoItem model)
-    implementation(project(":business:videofeed:presentation"))
-    
     // Shared modules
     implementation(project(":shared:common"))
     implementation(project(":shared:player"))  // 播放器

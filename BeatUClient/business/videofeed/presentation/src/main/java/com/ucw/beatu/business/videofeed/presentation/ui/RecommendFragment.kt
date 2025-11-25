@@ -15,6 +15,7 @@ import com.ucw.beatu.business.videofeed.presentation.ui.adapter.VideoFeedAdapter
 import com.ucw.beatu.business.videofeed.presentation.viewmodel.RecommendViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
 
 /**
  * 推荐页面Fragment
@@ -25,6 +26,9 @@ class RecommendFragment : Fragment() {
 
     companion object {
         private const val TAG = "RecommendFragment"
+        private const val STATE_VIDEOS = "recommend_videos"
+        private const val STATE_VIEWPAGER_INDEX = "recommend_viewpager_index"
+        private const val STATE_CURRENT_PAGE = "recommend_current_page"
     }
 
     private val viewModel: RecommendViewModel by viewModels()
@@ -32,6 +36,7 @@ class RecommendFragment : Fragment() {
     private var viewPager: ViewPager2? = null
     private var adapter: VideoFeedAdapter? = null
     private var isRefreshing = false
+    private var pendingRestoreIndex: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,6 +89,8 @@ class RecommendFragment : Fragment() {
         
         // 观察 ViewModel 状态
         observeViewModel()
+
+        savedInstanceState?.let { restoreState(it) }
     }
     
     /**
@@ -127,10 +134,12 @@ class RecommendFragment : Fragment() {
                     if (state.videoList.isNotEmpty()) {
                         adapter?.updateVideoList(state.videoList)
                         
-                        // 如果是刷新完成，重置刷新状态
-                        if (isRefreshing && !state.isRefreshing) {
+                        if (pendingRestoreIndex != null) {
+                            val target = pendingRestoreIndex!!.coerceIn(0, state.videoList.lastIndex)
+                            viewPager?.post { viewPager?.setCurrentItem(target, false) }
+                            pendingRestoreIndex = null
+                        } else if (isRefreshing && !state.isRefreshing) {
                             isRefreshing = false
-                            // 刷新后回到第一个视频
                             viewPager?.setCurrentItem(0, false)
                         }
                     }
@@ -158,6 +167,26 @@ class RecommendFragment : Fragment() {
         super.onDestroyView()
         viewPager = null
         adapter = null
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val videos = ArrayList(viewModel.uiState.value.videoList)
+        if (videos.isNotEmpty()) {
+            outState.putParcelableArrayList(STATE_VIDEOS, videos)
+            outState.putInt(STATE_VIEWPAGER_INDEX, viewPager?.currentItem ?: 0)
+            outState.putInt(STATE_CURRENT_PAGE, viewModel.getCurrentPage())
+        }
+    }
+
+    private fun restoreState(savedInstanceState: Bundle) {
+        val videos = savedInstanceState.getParcelableArrayList<VideoItem>(STATE_VIDEOS)
+        val restoredIndex = savedInstanceState.getInt(STATE_VIEWPAGER_INDEX, 0)
+        val restoredPage = savedInstanceState.getInt(STATE_CURRENT_PAGE, 1)
+        if (!videos.isNullOrEmpty()) {
+            pendingRestoreIndex = restoredIndex
+            viewModel.restoreState(videos, restoredPage)
+        }
     }
 }
 

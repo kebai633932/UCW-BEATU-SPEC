@@ -15,6 +15,12 @@ data class VideoItem(
     val likeCount: Int,
     val commentCount: Int,
     val favoriteCount: Int,
-    val shareCount: Int
+    val shareCount: Int,
+    val orientation: VideoOrientation = VideoOrientation.PORTRAIT
 ) : Parcelable
+
+enum class VideoOrientation {
+    PORTRAIT,
+    LANDSCAPE
+}
 
