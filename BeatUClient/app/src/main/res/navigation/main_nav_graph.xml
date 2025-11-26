@@ -15,12 +15,20 @@
         <!-- 跳转到用户主页 -->
         <action
             android:id="@+id/action_feed_to_userProfile"
-            app:destination="@id/userProfile" />
+            app:destination="@id/userProfile"
+            app:enterAnim="@anim/slide_in_from_right"
+            app:exitAnim="@anim/slide_out_to_left"
+            app:popEnterAnim="@anim/slide_in_from_left"
+            app:popExitAnim="@anim/slide_out_to_right" />
         
         <!-- 跳转到搜索页面 -->
         <action
             android:id="@+id/action_feed_to_search"
-            app:destination="@id/search" />
+            app:destination="@id/search"
+            app:enterAnim="@anim/slide_in_from_right"
+            app:exitAnim="@anim/slide_out_to_left"
+            app:popEnterAnim="@anim/slide_in_from_left"
+            app:popExitAnim="@anim/slide_out_to_right" />
         
         <!-- 跳转到设置页面 -->
         <action
@@ -45,7 +53,11 @@
             android:id="@+id/action_userProfile_to_feed"
             app:destination="@id/feed"
             app:popUpTo="@id/feed"
-            app:popUpToInclusive="false" />
+            app:popUpToInclusive="false"
+            app:enterAnim="@anim/slide_in_from_left"
+            app:exitAnim="@anim/slide_out_to_right"
+            app:popEnterAnim="@anim/slide_in_from_left"
+            app:popExitAnim="@anim/slide_out_to_right" />
     </fragment>
 
     <!-- 搜索页面 -->
@@ -60,7 +72,11 @@
             android:id="@+id/action_search_to_feed"
             app:destination="@id/feed"
             app:popUpTo="@id/feed"
-            app:popUpToInclusive="false" />
+            app:popUpToInclusive="false"
+            app:enterAnim="@anim/slide_in_from_left"
+            app:exitAnim="@anim/slide_out_to_right"
+            app:popEnterAnim="@anim/slide_in_from_left"
+            app:popExitAnim="@anim/slide_out_to_right" />
     </fragment>
 
     <!-- 设置页面 -->

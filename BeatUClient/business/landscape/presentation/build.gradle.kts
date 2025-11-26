@@ -44,6 +44,9 @@ dependencies {
     // Business Data
     implementation(project(":business:landscape:data"))
     
+    // Video domain model复用
+    implementation(project(":business:videofeed:domain"))
+    
     // Shared modules
     implementation(project(":shared:common"))
     implementation(project(":shared:player"))  // 播放器

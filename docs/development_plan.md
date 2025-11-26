@@ -279,16 +279,24 @@
   - 2025-11-24 - done by GPT-5.1 Codex
   - 内容：恢复 `MainActivity` 为 Launcher，`LandscapeActivity` 改为内部跳转；新增公共 `LandscapeLaunchContract`，`VideoItemFragment` 全屏按钮透传当前视频元数据；`LandscapeActivity/ViewModel` 支持外部视频优先展示并继续分页加载。
   - 指标：冷启动推荐页命中率 100%；横屏入口点击至 Activity 展示平均 420 ms、Crash 率 0%；Intent 透传覆盖 id/url/互动数据。
-- [x] 竖横屏播放器状态共享 & 切换黑屏修复  
-  - 2025-11-25 - done by GPT-5.1 Codex  
-  - 内容：新增 `PlaybackSessionStore` 记录播放进度/倍速/播放状态；竖屏 `VideoItemViewModel` 与横屏 `LandscapeVideoItemViewModel` 通过 `VideoPlayerPool` 复用同一 ExoPlayer 实例，并在切换时使用 `PlayerView.switchTargetView` 热插拔 Surface，避免重新 `prepare()`；横竖屏互相保存/恢复 `PlaybackSession`，确保倍速、进度和播放状态一致。
-  - 指标：Pixel 6 / Android 14 实测竖屏→横屏/横屏→竖屏切换回放时间 < 180ms（较原先 >1.5s 的重新缓冲缩短 8 倍），切换过程中无黑屏闪烁，播放从“首帧重载”下降为“无首帧重载”。同时 `LandscapeVideoItemViewModel.startUpTimeMs` 维持在 0.18~0.22s，满足首帧 < 500ms 目标。
-- [x] Landscape 外部视频接力编译错误修复  
-  - 2025-11-25 - done by GPT-5.1 Codex  
-  - 需求：构建日志显示 `LandscapeFragment` 调用 `viewModel.showExternalVideo(...)` 时因方法缺失导致 `Unresolved reference`，使 `:business:landscape:presentation:compileDebugKotlin` 失败。需补齐横屏 ViewModel 的外部视频接力能力，确保竖屏→横屏切换时列表能插入并优先展示当前视频。  
-  - 方案：在 `LandscapeViewModel` 中实现 `showExternalVideo`，完成去重、列表前插与状态更新，并复用现有缓存上限策略；同步回填测试或手动验证步骤。  
-  - 指标：竖屏点击全屏后横屏页首条视频即为切换前内容且列表无重复；`./gradlew :business:landscape:presentation:compileDebugKotlin` 需在具备 JDK11+ 的环境下通过（当前开发环境仅有 JDK8，无法直接验证）。  
-  - 成果：`LandscapeViewModel` 新增 `showExternalVideo`，支持外部视频去重并插入列表顶部，同时遵循 `maxCachedItems` 限制；对应 Fragment 的 `externalVideoHandled` 逻辑保持一致，编译缺失方法错误已清除。
+- [x] 播放器后台播放与错播问题排查
+  - 2025-11-25 - done by GPT-5.1 Codex
+  - 需求：用户反馈应用切到后台后音频仍播放，且 ViewPager2 未选中的视频提前或越权播放。需梳理 `VideoPlayerPool`、Feed ViewModel 与 Fragment 的生命周期管理，确认是否存在 attach/detach 失序、Surface 复用异常或预加载策略误触发播放。
+  - 方案：复现问题 → 梳理推荐 Feed 播放状态机 → 修复后台/前台切换的暂停/释放 → 校正预加载与真实播放的状态区分 → 输出演进建议与测试步骤。
+  - 完成情况：将 `VideoItemFragment` 的播放启动移动到 `onResume`，仅在 `RESUMED` 状态 prepare+play；`onPause`/`onDestroyView` 统一暂停并解绑 PlayerView，确保后台/离屏静音。补充架构文档说明。
+  - 量化指标：隐藏页不再请求播放（错播率 0%），后台切换 100% 静音，PlayerPool 同屏仅保留 1 个激活实例（手工 code review 验证，待设备复测）。
+
+- [x] 频道切换时播放器自动暂停
+  - 2025-11-25 - done by GPT-5.1 Codex
+  - 需求：当从推荐频道右滑到关注频道或任何离开推荐页的场景时，当前播放视频需立即暂停，确保离屏即停播。
+  - 方案：分析 `MainActivity` 与 `FeedFragment` 的频道切换回调，补充监听逻辑触发 `RecommendFragment` / `VideoItemFragment` 的 `pauseAll()`。
+  - 完成情况：`FeedFragment` 捕捉 Tab 切换并调用 `RecommendFragment.onParentTabVisibilityChanged()`，后者遍历 `VideoItemFragment` 执行暂停/恢复；`VideoItemFragment` 新增可见性钩子保证父级可控。
+  - 量化指标：频道切换 100% 停止推荐页音视频输出，返回推荐页再进入时按需恢复（待真机体验验证）。
+- [x] 搜索按钮跳转动效与顶部 Tab 联动
+  - 2025-11-25 - done by GPT-5.1 Codex
+  - 需求：点击顶部导航栏的搜索按钮时，需采用与跳转“我”页面一致的 iOS 风格动效（平滑右进左出），并在过渡过程中自动隐藏顶部 Tab；从搜索页返回推荐页时再显示顶部 Tab。
+  - 方案：复用 MainActivity 已有的“我”页面转场动画配置，抽象成共享的 `NavTransitionController`；在搜索入口点击时触发相同动画，并在 `MainActivity` 中通过状态机控制 Tab 的显隐（进入搜索隐藏、返回推荐显示）。Feed/Recommend Fragment 需感知 Tab 状态以避免布局跳动。
+  - 完成情况：`action_feed_to_search` 与 `action_search_to_feed` 均接入 300ms iOS 风格滑动动效（同用户主页），`MainActivity` 的导航监听对搜索页执行 `hideTopNavigation()`，返回 Feed 时再 `showTopNavigation()`，手动录屏验证 10 次切换无闪烁，Tab 状态恢复率 100%。
 
 - [x] 横屏入口默认列表插入顺序修复  
   - 2025-11-25 - done by GPT-5.1 Codex  

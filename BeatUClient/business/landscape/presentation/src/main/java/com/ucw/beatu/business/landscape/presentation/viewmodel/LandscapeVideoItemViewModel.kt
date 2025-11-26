@@ -14,6 +14,8 @@ import com.ucw.beatu.shared.player.pool.VideoPlayerPool
 import com.ucw.beatu.shared.player.session.PlaybackSession
 import com.ucw.beatu.shared.player.session.PlaybackSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,9 +45,8 @@ class LandscapeVideoItemViewModel @Inject constructor(
     private var currentVideoUrl: String? = null
 
     private val startUpStopwatch = Stopwatch()
-    
-    // 播放进度更新
-    private var progressUpdateJob: kotlinx.coroutines.Job? = null
+
+    private var progressUpdateJob: Job? = null
     private var playerListener: VideoPlayer.Listener? = null
     private var handoffFromPortrait = false
 
@@ -81,7 +82,7 @@ class LandscapeVideoItemViewModel @Inject constructor(
         }
     }
 
-    fun preparePlayer(videoId: String, videoUrl: String, playerView: androidx.media3.ui.PlayerView) {
+    fun preparePlayer(videoId: String, videoUrl: String, playerView: PlayerView) {
         viewModelScope.launch {
             try {
                 if (videoId.isBlank() || videoUrl.isBlank()) {
@@ -225,20 +226,16 @@ class LandscapeVideoItemViewModel @Inject constructor(
         currentPlayer?.seekTo(positionMs)
         _uiState.value = _uiState.value.copy(currentPositionMs = positionMs)
     }
-    
-    fun getCurrentPosition(): Long {
-        return currentPlayer?.player?.currentPosition ?: 0L
-    }
-    
-    fun getDuration(): Long {
-        return currentPlayer?.player?.duration?.takeIf { it > 0 } ?: 0L
-    }
-    
+
+    fun getCurrentPosition(): Long = currentPlayer?.player?.currentPosition ?: 0L
+
+    fun getDuration(): Long = currentPlayer?.player?.duration?.takeIf { it > 0 } ?: 0L
+
     private fun startProgressUpdates() {
         stopProgressUpdates()
         progressUpdateJob = viewModelScope.launch {
             while (currentPlayer != null) {
-                kotlinx.coroutines.delay(500) // 每500ms更新一次
+                delay(500)
                 currentPlayer?.let { player ->
                     val position = player.player.currentPosition
                     val duration = player.player.duration.takeIf { it > 0 } ?: 0L
@@ -250,7 +247,7 @@ class LandscapeVideoItemViewModel @Inject constructor(
             }
         }
     }
-    
+
     private fun stopProgressUpdates() {
         progressUpdateJob?.cancel()
         progressUpdateJob = null

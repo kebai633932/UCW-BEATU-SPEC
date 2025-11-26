@@ -1,28 +1,27 @@
 package com.ucw.beatu.business.landscape.presentation.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ucw.beatu.business.landscape.domain.usecase.LandscapeUseCases
 import com.ucw.beatu.business.landscape.presentation.model.VideoItem
-import com.ucw.beatu.business.landscape.presentation.model.VideoOrientation
-import com.ucw.beatu.shared.common.mock.MockVideoCatalog
-import com.ucw.beatu.shared.common.mock.MockVideoCatalog.Orientation.LANDSCAPE
-import com.ucw.beatu.shared.common.mock.Video
+import com.ucw.beatu.business.landscape.presentation.model.toPresentationModel
+import com.ucw.beatu.shared.common.logger.AppLogger
+import com.ucw.beatu.shared.common.result.AppResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 /**
- * 横屏页 ViewModel
- * 管理横屏视频列表，使用 Repository 获取数据（目前使用 mock 数据）
+ * 横屏列表 ViewModel：负责调用 UseCase、分页加载并保证首条为外部传入视频。
  */
 @HiltViewModel
 class LandscapeViewModel @Inject constructor(
-    application: Application
-) : AndroidViewModel(application) {
+    private val useCases: LandscapeUseCases
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LandscapeUiState())
     val uiState: StateFlow<LandscapeUiState> = _uiState.asStateFlow()
@@ -30,54 +29,87 @@ class LandscapeViewModel @Inject constructor(
     private var currentPage = 1
     private val pageSize = 5
     private val maxCachedItems = 40
+
     private var pendingExternalVideo: VideoItem? = null
     private var shouldReapplyExternalVideo = false
     private var isDefaultListLoading = false
+    private var isLoadingMore = false
 
-    /**
-     * 加载第一页 Mock 数据
-     */
     fun loadVideoList() {
-        viewModelScope.launch {
-            currentPage = 1
-            isDefaultListLoading = true
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            val mockVideos = MockVideoCatalog.getPage(LANDSCAPE, currentPage, pageSize)
-                .map { it.toLandscapeVideoItem() }
-            _uiState.value = _uiState.value.copy(
-                videoList = mockVideos,
-                isLoading = false,
-                error = null
-            )
-            isDefaultListLoading = false
-            applyPendingExternalVideo(forceInsert = false)
-        }
+        currentPage = 1
+        isDefaultListLoading = true
+        fetchPage(page = currentPage, append = false)
     }
 
-    /**
-     * 加载更多 Mock 数据（复用阿里云链接，保证有效性）
-     */
     fun loadMoreVideos() {
+        if (isLoadingMore || _uiState.value.isLoading) return
+        isLoadingMore = true
+        val nextPage = currentPage + 1
+        fetchPage(page = nextPage, append = true)
+    }
+
+    private fun fetchPage(page: Int, append: Boolean) {
         viewModelScope.launch {
-            currentPage++
-            val moreMockVideos = MockVideoCatalog.getPage(LANDSCAPE, currentPage, pageSize)
-                .map { it.toLandscapeVideoItem() }
-            val mergedList = (_uiState.value.videoList + moreMockVideos)
-                .takeLast(maxCachedItems)
-            _uiState.value = _uiState.value.copy(
-                videoList = mergedList,
-                error = null
-            )
+            val flow = if (append) {
+                useCases.loadMoreLandscapeVideos(page, pageSize)
+            } else {
+                useCases.getLandscapeVideos(page, pageSize)
+            }
+
+            flow.collect { result ->
+                when (result) {
+                    is AppResult.Loading -> {
+                        if (!append) {
+                            _uiState.update { it.copy(isLoading = true, error = null) }
+                        }
+                    }
+
+                    is AppResult.Success -> {
+                        val mapped = result.data.map { it.toPresentationModel() }
+                        _uiState.update { state ->
+                            val baseList = if (append) {
+                                state.videoList + mapped
+                            } else {
+                                mapped
+                            }
+                            state.copy(
+                                videoList = baseList.takeLast(maxCachedItems),
+                                isLoading = false,
+                                error = null,
+                                lastUpdated = System.currentTimeMillis()
+                            )
+                        }
+                        if (append) {
+                            currentPage = page
+                            isLoadingMore = false
+                        } else {
+                            isDefaultListLoading = false
+                        }
+                        applyPendingExternalVideo(forceInsert = false)
+                        AppLogger.d(TAG, "Loaded landscape page=$page size=${mapped.size}")
+                    }
+
+                    is AppResult.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                error = result.message ?: "加载失败"
+                            )
+                        }
+                        isLoadingMore = false
+                        isDefaultListLoading = false
+                        AppLogger.e(TAG, "load landscape failed", result.throwable)
+                    }
+                }
+            }
         }
     }
 
-    /**
-     * 插入外部（竖屏传入）的当前视频，确保横屏页首条就是当前播放视频。
-     */
     fun showExternalVideo(videoItem: VideoItem) {
         viewModelScope.launch {
-            pendingExternalVideo = videoItem.copy(orientation = VideoOrientation.LANDSCAPE)
-            shouldReapplyExternalVideo = isDefaultListLoading || _uiState.value.videoList.isEmpty()
+            pendingExternalVideo = videoItem
+            shouldReapplyExternalVideo =
+                isDefaultListLoading || _uiState.value.videoList.isEmpty()
             applyPendingExternalVideo(forceInsert = true)
             if (!shouldReapplyExternalVideo) {
                 pendingExternalVideo = null
@@ -85,29 +117,20 @@ class LandscapeViewModel @Inject constructor(
         }
     }
 
-    /**
-     * 将待插入的外部视频放到列表首位。
-     * @param forceInsert 当默认列表尚未加载完成但需要立即展示时强制插入
-     */
     private fun applyPendingExternalVideo(forceInsert: Boolean) {
         val external = pendingExternalVideo ?: return
         val currentList = _uiState.value.videoList
-        if (currentList.isEmpty() && !forceInsert) {
-            // 等待默认列表加载完成后再插入
-            return
-        }
+        if (currentList.isEmpty() && !forceInsert) return
 
-        val mergedList = buildList {
+        val merged = buildList {
             add(external)
             currentList.forEach { item ->
-                if (item.id != external.id) {
-                    add(item)
-                }
+                if (item.id != external.id) add(item)
             }
         }.take(maxCachedItems)
 
         _uiState.value = _uiState.value.copy(
-            videoList = mergedList,
+            videoList = merged,
             isLoading = false,
             error = null
         )
@@ -118,26 +141,15 @@ class LandscapeViewModel @Inject constructor(
         }
     }
 
-    private fun Video.toLandscapeVideoItem(): VideoItem =
-        VideoItem(
-            id = id,
-            videoUrl = url,
-            title = title,
-            authorName = author,
-            likeCount = likeCount,
-            commentCount = commentCount,
-            favoriteCount = favoriteCount,
-            shareCount = shareCount,
-            orientation = when (orientation) {
-                MockVideoCatalog.Orientation.PORTRAIT -> com.ucw.beatu.business.landscape.presentation.model.VideoOrientation.PORTRAIT
-                MockVideoCatalog.Orientation.LANDSCAPE -> com.ucw.beatu.business.landscape.presentation.model.VideoOrientation.LANDSCAPE
-            }
-        )
+    companion object {
+        private const val TAG = "LandscapeViewModel"
+    }
 }
 
-// 移到文件顶层！让外部（Activity/Adapter）能访问
 data class LandscapeUiState(
     val videoList: List<VideoItem> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val lastUpdated: Long? = null
 )
+

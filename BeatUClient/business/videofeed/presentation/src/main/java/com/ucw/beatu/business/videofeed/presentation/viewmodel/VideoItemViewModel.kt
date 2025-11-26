@@ -185,6 +185,14 @@ class VideoItemViewModel @Inject constructor(
     }
 
     /**
+     * 恢复播放
+     */
+    fun resume() {
+        currentPlayer?.play()
+        _uiState.value = _uiState.value.copy(isPlaying = true)
+    }
+
+    /**
      * 将当前播放器重新绑定到新的 PlayerView（例如横竖屏切回）。
      */
     fun onHostResume(targetView: PlayerView?) {

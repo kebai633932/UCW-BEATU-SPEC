@@ -1,3 +1,5 @@
+@file:OptIn(UnstableApi::class)
+
 package com.ucw.beatu.business.videofeed.presentation.ui
 
 import android.os.Bundle
@@ -12,6 +14,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
 import androidx.navigation.fragment.findNavController
@@ -24,10 +27,6 @@ import com.ucw.beatu.shared.common.navigation.NavigationIds
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
-/**
- * 单个视频项 Fragment
- * 用于在 ViewPager2 中显示单个视频
- */
 @AndroidEntryPoint
 class VideoItemFragment : Fragment() {
 
@@ -45,15 +44,16 @@ class VideoItemFragment : Fragment() {
     }
 
     private val viewModel: VideoItemViewModel by viewModels()
-    
+
     private var playerView: PlayerView? = null
     private var playButton: View? = null
     private var videoItem: VideoItem? = null
     private var navigatingToLandscape = false
+    private var hasPreparedPlayer = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        videoItem = arguments?.let { 
+        videoItem = arguments?.let {
             BundleCompat.getParcelable(it, ARG_VIDEO_ITEM, VideoItem::class.java)
         }
         if (videoItem == null) {
@@ -71,12 +71,10 @@ class VideoItemFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        
-        // 初始化视图
+
         playerView = view.findViewById(R.id.player_view)
         playButton = view.findViewById(R.id.iv_play_button)
-        
-        // 更新视频信息
+
         videoItem?.let { item ->
             view.findViewById<android.widget.TextView>(R.id.tv_video_title)?.text = item.title
             view.findViewById<android.widget.TextView>(R.id.tv_channel_name)?.text = item.authorName
@@ -85,108 +83,103 @@ class VideoItemFragment : Fragment() {
             view.findViewById<android.widget.TextView>(R.id.tv_favorite_count)?.text = item.favoriteCount.toString()
             view.findViewById<android.widget.TextView>(R.id.tv_share_count)?.text = item.shareCount.toString()
         }
-        
-        // 观察 ViewModel 状态
+
         observeViewModel()
-        
-        // 设置播放按钮点击事件
-        playButton?.setOnClickListener {
-            viewModel.togglePlayPause()
-        }
-        
-        // 设置底部交互按钮点击事件
-        view.findViewById<View>(R.id.iv_like)?.setOnClickListener {
-            // TODO: 点赞功能
-        }
-        
-        view.findViewById<View>(R.id.iv_favorite)?.setOnClickListener {
-            // TODO: 收藏功能
-        }
-        
-        view.findViewById<View>(R.id.iv_comment)?.setOnClickListener {
-            // TODO: 打开评论
-        }
-        
-        view.findViewById<View>(R.id.iv_share)?.setOnClickListener {
-            // TODO: 分享功能
-        }
-        
-        view.findViewById<View>(R.id.iv_fullscreen)?.setOnClickListener {
-            openLandscapeMode()
-        }
-        
-        // 延迟加载视频，确保视图完全初始化
-        view.post {
-            if (isAdded && viewLifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.INITIALIZED)) {
-                loadVideo()
-            }
-        }
+
+        playButton?.setOnClickListener { viewModel.togglePlayPause() }
+        view.findViewById<View>(R.id.iv_like)?.setOnClickListener { /* TODO */ }
+        view.findViewById<View>(R.id.iv_favorite)?.setOnClickListener { /* TODO */ }
+        view.findViewById<View>(R.id.iv_comment)?.setOnClickListener { /* TODO */ }
+        view.findViewById<View>(R.id.iv_share)?.setOnClickListener { /* TODO */ }
+        view.findViewById<View>(R.id.iv_fullscreen)?.setOnClickListener { openLandscapeMode() }
     }
-    
+
     private fun observeViewModel() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    // 更新播放器显示状态
                     playerView?.visibility = View.VISIBLE
-                    
-                    // 更新播放按钮显示状态（播放时隐藏，暂停时显示）
-                    playButton?.visibility = if (state.isPlaying) {
-                        View.GONE
-                    } else {
-                        View.VISIBLE
-                    }
-                    
-                    // 处理错误
-                    state.error?.let { error ->
-                        Log.e(TAG, "播放错误: $error")
-                    }
+                    playButton?.visibility = if (state.isPlaying) View.GONE else View.VISIBLE
+                    state.error?.let { error -> Log.e(TAG, "播放错误: $error") }
                 }
             }
         }
     }
-    
-    private fun loadVideo() {
-        if (!isAdded || view == null || playerView == null || videoItem == null) {
-            Log.w(TAG, "Fragment not ready, skip loading video")
-            return
-        }
-        
-        try {
-            val item = videoItem!!
-            Log.d(TAG, "Loading video: ${item.id} - ${item.videoUrl}")
-            
-            playerView?.let { pv ->
-                viewModel.playVideo(item.id, item.videoUrl)
-                viewModel.preparePlayer(item.id, item.videoUrl, pv)
-            } ?: run {
-                Log.e(TAG, "PlayerView is null, cannot load video")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading video", e)
+
+    // ✅ 修复：onStart() 逻辑
+    override fun onStart() {
+        super.onStart()
+        if (viewModel.uiState.value.currentVideoId != null) {
+            // 横屏返回，恢复播放器
+            reattachPlayer()
+        } else {
+            // 首次加载
+            preparePlayerForFirstTime()
         }
     }
-    
+
+    override fun onResume() {
+        super.onResume()
+        navigatingToLandscape = false
+        // ✅ 修复：不再自动播放，由 onStart() 或 onParentVisibilityChanged() 控制
+    }
+
     override fun onPause() {
         super.onPause()
-        if (!navigatingToLandscape) {
+        if (!navigatingToLandscape && hasPreparedPlayer) {
             viewModel.pause()
         }
     }
-    
-    override fun onResume() {
-        super.onResume()
-        if (isAdded && viewModel.uiState.value.currentVideoId != null) {
-            viewModel.onHostResume(playerView)
-        }
-        navigatingToLandscape = false
-    }
-    
+
     override fun onDestroyView() {
         super.onDestroyView()
+        playerView?.player = null
         viewModel.releaseCurrentPlayer()
         playerView = null
         playButton = null
+        hasPreparedPlayer = false
+    }
+
+    fun onParentVisibilityChanged(isVisible: Boolean) {
+        if (isVisible) {
+            startPlaybackIfNeeded()
+        } else if (hasPreparedPlayer) {
+            viewModel.pause()
+        }
+    }
+
+    fun onParentTabVisibilityChanged(isVisible: Boolean) {
+        onParentVisibilityChanged(isVisible)
+    }
+
+    private fun startPlaybackIfNeeded(forcePrepare: Boolean = false) {
+        if (!isAdded || playerView == null || videoItem == null) {
+            Log.w(TAG, "Fragment not ready, skip startPlayback")
+            return
+        }
+
+        if (!hasPreparedPlayer || forcePrepare) {
+            preparePlayerForFirstTime()
+        } else {
+            viewModel.resume()
+        }
+    }
+
+    // ✅ 修复：首次加载逻辑
+    private fun preparePlayerForFirstTime() {
+        val item = videoItem ?: return
+        val pv = playerView ?: return
+        Log.d(TAG, "Preparing video for playback: ${item.id}")
+        viewModel.playVideo(item.id, item.videoUrl)
+        viewModel.preparePlayer(item.id, item.videoUrl, pv)
+        hasPreparedPlayer = true
+    }
+
+    // ✅ 修复：重绑定播放器逻辑
+    private fun reattachPlayer() {
+        if (!isAdded || playerView == null) return
+        viewModel.onHostResume(playerView) // 确保调用 ViewModel 的恢复逻辑
+        hasPreparedPlayer = true
     }
 
     private fun openLandscapeMode() {
@@ -204,10 +197,7 @@ class VideoItemFragment : Fragment() {
             PlayerView.switchTargetView(player, playerView, null)
         }
 
-        val actionId = NavigationHelper.getResourceId(
-            requireContext(),
-            NavigationIds.ACTION_FEED_TO_LANDSCAPE
-        )
+        val actionId = NavigationHelper.getResourceId(requireContext(), NavigationIds.ACTION_FEED_TO_LANDSCAPE)
         if (actionId == 0) {
             Log.e(TAG, "Navigation action not found: ${NavigationIds.ACTION_FEED_TO_LANDSCAPE}")
             return
@@ -233,8 +223,12 @@ class VideoItemFragment : Fragment() {
     }
 
     private fun findParentNavController(): NavController? {
-        return runCatching { parentFragment?.findNavController() ?: findNavController() }
-            .getOrNull()
+        return runCatching { parentFragment?.findNavController() ?: findNavController() }.getOrNull()
+    }
+
+    // ✅ 保留：仅用于设置 currentVideoId
+    private fun loadVideo() {
+        val item = videoItem ?: return
+        viewModel.playVideo(item.id, item.videoUrl)
     }
 }
-

@@ -73,6 +73,7 @@ class LandscapeFragment : Fragment(R.layout.fragment_landscape) {
             })
         }
 
+        // 使用 NavController 返回（而非 btn_exit_landscape）
         root.findViewById<View>(R.id.btn_exit_landscape)?.setOnClickListener {
             exitLandscape()
         }
@@ -129,8 +130,7 @@ class LandscapeFragment : Fragment(R.layout.fragment_landscape) {
         currentLandscapeItemFragment()?.prepareForExit()
         // 恢复屏幕方向
         restoreOrientation()
-        // 使用 NavController 返回，NavHost 会自动处理栈管理
-        // 如果 NavHost 是 defaultNavHost，系统 Back 键也会自动回退到 Feed
+        //使用 NavController 返回，NavHost 会自动处理栈管理
         findNavController().popBackStack()
     }
 
@@ -151,6 +151,4 @@ class LandscapeFragment : Fragment(R.layout.fragment_landscape) {
         }
         shouldForcePortraitOnExit = false
     }
-
 }
-
