@@ -29,9 +29,9 @@ object MockVideoCatalog {
     /** 明确类型：List<Video> */
     private val portraitVideos: List<Video> = listOf(
         Video(
-            id = "video_001",
+            id = "video_0011",
             url = "http://vjs.zencdn.net/v/oceans.mp4",
-            title = "《切腹》1/2上集:浪人为何要用竹刀这般折磨自己?",
+            title = "测试视频1",
             author = "云哥讲电影 视频1",
             likeCount = 535,
             commentCount = 43,
@@ -40,18 +40,7 @@ object MockVideoCatalog {
             orientation = PORTRAIT
         ),
         Video(
-            id = "video_002",
-            url = "https://upos-sz-estghw.bilivideo.com/upgcxcode/99/95/33457049599/33457049599-1-192.mp4?e=ig8euxZM2rNcNbRz7WdVhwdlhWhBhwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&platform=html5&gen=playurlv3&os=estghw&og=hw&mid=0&nbs=1&trid=81f95ba5fae0412e8532e748e28bb39h&deadline=1764172214&oi=1782024106&uipk=5&upsig=27ccebc54c57168322f83a48b0242085&uparams=e,platform,gen,os,og,mid,nbs,trid,deadline,oi,uipk&bvc=vod&nettype=0&bw=1085239&build=0&dl=0&f=h_0_0&agrr=0&buvid=&orderid=0,1",
-            title = "疯狂动物城",
-            author = "视频2",
-            likeCount = 1234,
-            commentCount = 89,
-            favoriteCount = 567,
-            shareCount = 234,
-            orientation = PORTRAIT
-        ),
-        Video(
-            id = "video_003",
+            id = "video_0012",
             url = "https://media.w3.org/2010/05/sintel/trailer.mp4",
             title = "Sintel 高清预告片 - 奇幻冒险",
             author = "视频3",
@@ -62,10 +51,109 @@ object MockVideoCatalog {
             orientation = PORTRAIT
         ),
         Video(
+            id = "video_002",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E6%A8%AA%E5%B1%8F%E8%A7%86%E9%A2%911.mp4",
+            title = "横屏视频1",
+            author = "视频2",
+            likeCount = 1234,
+            commentCount = 89,
+            favoriteCount = 567,
+            shareCount = 234,
+            orientation = PORTRAIT
+        ),
+        Video(
+            id = "video_003",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E6%A8%AA%E5%B1%8F%E8%A7%86%E9%A2%912.mp4",
+            title = "横屏视频2",
+            author = "视频3",
+            likeCount = 1234,
+            commentCount = 89,
+            favoriteCount = 567,
+            shareCount = 234,
+            orientation = PORTRAIT
+        ),
+        Video(
             id = "video_004",
-            url = "“https://upos-sz-estgoss.bilivideo.com/upgcxcode/02/94/364849402/364849402_da2-1-192.mp4?e=ig8euxZM2rNcNbRjhzdVhwdlhWTzhwdVhoNvNC8BqJIzNbfq9rVEuxTEnE8L5F6VnEsSTx0vkX8fqJeYTj_lta53NCM=&trid=73b626c3fb1c4e6482411c0f55a7977h&mid=0&uipk=5&oi=1782024106&og=cos&platform=html5&deadline=1764172045&nbs=1&gen=playurlv3&os=estgoss&upsig=df0dce13ef38221f6ab516b8f2922fc3&uparams=e,trid,mid,uipk,oi,og,platform,deadline,nbs,gen,os&bvc=vod&nettype=0&bw=1309699&agrr=0&buvid=&build=0&dl=0&f=h_0_0&orderid=0,1",
-            title = "【猛男版】新宝岛 ",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E6%A8%AA%E5%B1%8F%E8%A7%86%E9%A2%913.mp4",
+            title = "横屏视频3",
             author = "视频4",
+            likeCount = 1234,
+            commentCount = 89,
+            favoriteCount = 567,
+            shareCount = 234,
+            orientation = PORTRAIT
+        ),
+        Video(
+            id = "video_005",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E6%A8%AA%E5%B1%8F%E8%A7%86%E9%A2%914.mp4",
+            title = "横屏视频4",
+            author = "视频5",
+            likeCount = 1234,
+            commentCount = 89,
+            favoriteCount = 567,
+            shareCount = 234,
+            orientation = PORTRAIT
+        ),
+        Video(
+            id = "video_006",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E6%A8%AA%E5%B1%8F%E8%A7%86%E9%A2%915.mp4",
+            title = "横屏视频5",
+            author = "视频6",
+            likeCount = 1234,
+            commentCount = 89,
+            favoriteCount = 567,
+            shareCount = 234,
+            orientation = PORTRAIT
+        ),
+        Video(
+            id = "video_007",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E7%AB%96%E5%B1%8F%E8%A7%86%E9%A2%911.mp4",
+            title = "竖屏视频1",
+            author = "竖屏视频1",
+            likeCount = 2345,
+            commentCount = 156,
+            favoriteCount = 789,
+            shareCount = 456,
+            orientation = PORTRAIT
+        ),
+        Video(
+            id = "video_008",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E7%AB%96%E5%B1%8F%E7%AB%96%E5%B1%8F2.mp4",
+            title = "竖屏视频2",
+            author = "竖屏视频2",
+            likeCount = 2345,
+            commentCount = 156,
+            favoriteCount = 789,
+            shareCount = 456,
+            orientation = PORTRAIT
+        ),
+        Video(
+            id = "video_009",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E7%AB%96%E5%B1%8F%E8%A7%86%E9%A2%913.mp4",
+            title = "竖屏视频3",
+            author = "竖屏视频3",
+            likeCount = 2345,
+            commentCount = 156,
+            favoriteCount = 789,
+            shareCount = 456,
+            orientation = PORTRAIT
+        ),
+        Video(
+            id = "video_010",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E7%AB%96%E5%B1%8F%E8%A7%86%E9%A2%914.mp4",
+            title = "竖屏视频4",
+            author = "竖屏视频4",
+            likeCount = 2345,
+            commentCount = 156,
+            favoriteCount = 789,
+            shareCount = 456,
+            orientation = PORTRAIT
+        ),
+        Video(
+            id = "video_011",
+            url = "http://ucw-beatu.oss-cn-shenzhen.aliyuncs.com/%E7%AB%96%E5%B1%8F%E7%AB%96%E5%B1%8F5.mp4",
+            title = "竖屏视频5",
+            author = "竖屏视频5",
             likeCount = 2345,
             commentCount = 156,
             favoriteCount = 789,
@@ -84,6 +172,7 @@ object MockVideoCatalog {
             orientation = LANDSCAPE
         )
     )
+
 
     /** 显式指定类型避免递归推断失败 */
     private val landscapeVideos: List<Video> = portraitVideos.map { template ->
