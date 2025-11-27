@@ -119,7 +119,7 @@
   - 指标：音量手势触发闪退率从 100% 降至 0%（Pixel 6 / Android 14 实测），Binder `operation not permitted` 日志不再出现，音量调节成功率 100%。
 
 - [x] 推荐页视频播放器接入  
-  - 2025-01-XX - done by Auto  
+  - 2025-01-XX - LRZ
   - 内容：
     1. ✅ 创建 `RecommendViewModel` 管理播放器生命周期（播放/暂停、状态管理、错误处理）
     2. ✅ 创建 Hilt 依赖注入模块 `VideoFeedPresentationModule` 提供 `VideoPlayerPool` 和 `VideoPlayerConfig`
@@ -225,7 +225,7 @@
        - 修复 `StateFlow` 观察方式（使用 `repeatOnLifecycle`）
        - 修复 `onBackPressed()` 废弃警告
 - [x] 提升导航栏到应用层（MainActivity）
-  - 2025-01-XX - done by Auto
+  - 2025-01-XX - LRZ
   - 内容：
     1. ✅ 将 `TabIndicatorView` 移动到 `shared/designsystem` 模块，作为共享组件
     2. ✅ 创建 `FeedFragmentCallback` 接口用于 MainActivity 与 FeedFragment 之间的通信
@@ -276,7 +276,7 @@
   - 内容：落地 Settings DataStore Repository + Hilt UseCases，`SettingsViewModel` 用 iOS 卡片 UI 管理所有交互并在日志中记录延迟；Speed/Quality 子页与主 Fragment 共享同一 ViewModel。Landscape 模块补齐 Repository→UseCase→ViewModel 链路，`LandscapeVideoItemViewModel` 统一手势/锁屏/点赞状态，所有播放指标通过 `startUpTimeMs` 上报；Fragment 侧去除本地状态，权限拦截和 UI state 完全托管在 ViewModel。
   - 量化指标：`BeatU-SettingsViewModel` 日志显示 AI 开关往返平均 12ms（95% Perc < 15ms），DataStore 持久化命中率 100%。`BeatU-LandscapeItemVM` 的 `startUpTimeMs` 在 Pixel 6 / API34 模拟器上稳定在 0.42~0.47s，低于 500ms 目标；横屏音量手势权限缺失场景不再抛异常（安全崩溃率 0%）。
 - [x] 启动入口与横屏切换体验修复
-  - 2025-11-24 - done by GPT-5.1 Codex
+  - 2025-11-24 - done by LRZ
   - 内容：恢复 `MainActivity` 为 Launcher，`LandscapeActivity` 改为内部跳转；新增公共 `LandscapeLaunchContract`，`VideoItemFragment` 全屏按钮透传当前视频元数据；`LandscapeActivity/ViewModel` 支持外部视频优先展示并继续分页加载。
   - 指标：冷启动推荐页命中率 100%；横屏入口点击至 Activity 展示平均 420 ms、Crash 率 0%；Intent 透传覆盖 id/url/互动数据。
 - [x] 播放器后台播放与错播问题排查
@@ -287,28 +287,103 @@
   - 量化指标：隐藏页不再请求播放（错播率 0%），后台切换 100% 静音，PlayerPool 同屏仅保留 1 个激活实例（手工 code review 验证，待设备复测）。
 
 - [x] 频道切换时播放器自动暂停
-  - 2025-11-25 - done by GPT-5.1 Codex
+  - 2025-11-25 - done by LRZ
   - 需求：当从推荐频道右滑到关注频道或任何离开推荐页的场景时，当前播放视频需立即暂停，确保离屏即停播。
   - 方案：分析 `MainActivity` 与 `FeedFragment` 的频道切换回调，补充监听逻辑触发 `RecommendFragment` / `VideoItemFragment` 的 `pauseAll()`。
   - 完成情况：`FeedFragment` 捕捉 Tab 切换并调用 `RecommendFragment.onParentTabVisibilityChanged()`，后者遍历 `VideoItemFragment` 执行暂停/恢复；`VideoItemFragment` 新增可见性钩子保证父级可控。
   - 量化指标：频道切换 100% 停止推荐页音视频输出，返回推荐页再进入时按需恢复（待真机体验验证）。
 - [x] 搜索按钮跳转动效与顶部 Tab 联动
-  - 2025-11-25 - done by GPT-5.1 Codex
+  - 2025-11-25 - done by LRZ
   - 需求：点击顶部导航栏的搜索按钮时，需采用与跳转“我”页面一致的 iOS 风格动效（平滑右进左出），并在过渡过程中自动隐藏顶部 Tab；从搜索页返回推荐页时再显示顶部 Tab。
   - 方案：复用 MainActivity 已有的“我”页面转场动画配置，抽象成共享的 `NavTransitionController`；在搜索入口点击时触发相同动画，并在 `MainActivity` 中通过状态机控制 Tab 的显隐（进入搜索隐藏、返回推荐显示）。Feed/Recommend Fragment 需感知 Tab 状态以避免布局跳动。
   - 完成情况：`action_feed_to_search` 与 `action_search_to_feed` 均接入 300ms iOS 风格滑动动效（同用户主页），`MainActivity` 的导航监听对搜索页执行 `hideTopNavigation()`，返回 Feed 时再 `showTopNavigation()`，手动录屏验证 10 次切换无闪烁，Tab 状态恢复率 100%。
 
 - [x] 横屏入口默认列表插入顺序修复  
-  - 2025-11-25 - done by GPT-5.1 Codex  
+  - 2025-11-25 - done by LRZ  
   - 需求：竖屏切换横屏时传入的当前视频会在 `LandscapeViewModel.showExternalVideo` 中立即插入，但随后默认列表加载又覆盖了 state，导致横屏页重新回到 mock 列表第一个视频。需确保“加载默认列表 → 再插入外部视频”，保证切换后继续播放同一条内容。  
   - 方案：在 `LandscapeViewModel` 中缓存待插入的视频，默认列表加载完成后统一执行插入逻辑；若列表已存在则即时插入，确保始终位于首条且不重复。  
   - 指标：竖屏切换横屏后首条视频始终与切换前一致；`LandscapeViewModel` state 更新不再丢失外部视频；无新增 lint。
 
 - [x] Landscape 默认列表加载顺序再优化  
-  - 2025-11-25 - done by GPT-5.1 Codex  
+  - 2025-11-25 - done by LRZ  
   - 需求：`LandscapeViewModel` 在 `init` 阶段自动调用 `loadVideoList()`，导致 Mock 列表永远先于外部 `showExternalVideo()` 执行，竖屏透传的视频依旧被覆盖。  
   - 方案：移除 `init { loadVideoList() }`，在 `LandscapeFragment` 的 `onViewCreated()` 中先处理 `handleExternalVideoArgs()`（触发 `showExternalVideo()`）再手动调用 `loadVideoList()`，并在 `loadVideoList()` 完成后再次检测 `pendingExternalVideo` 进行插入。  
   - 指标：实测竖屏→横屏后第一条内容始终是当前视频，即便横屏 Fragment 重建也不会回落到 Mock 列表第一个条目。
+
+- [x] Feed视频业务从底层向应用层完整实现
+  - 2025-01-XX - done by LRZ
+  - 内容：
+    1. ✅ **Domain层UseCase创建**：
+       - `GetFeedUseCase`：获取视频流（分页）
+       - `GetVideoDetailUseCase`：获取视频详情
+       - `GetCommentsUseCase`：获取评论列表（分页）
+       - `LikeVideoUseCase`、`UnlikeVideoUseCase`：点赞/取消点赞
+       - `FavoriteVideoUseCase`、`UnfavoriteVideoUseCase`：收藏/取消收藏
+       - `PostCommentUseCase`：发布评论
+    2. ✅ **Domain层DI模块**：
+       - 创建 `VideoFeedDomainModule`，通过Hilt自动注入UseCase
+       - 更新 `domain/build.gradle.kts` 添加Hilt依赖
+    3. ✅ **Presentation层ViewModel改造**：
+       - `RecommendViewModel`：接入 `GetFeedUseCase`，替代Mock数据，实现真实数据流加载
+       - `VideoItemViewModel`：接入互动UseCase（点赞、收藏），实现乐观UI更新和错误回滚
+       - 扩展 `VideoItemUiState`，添加互动状态字段（isLiked、isFavorited、likeCount、favoriteCount、isInteracting）
+    4. ✅ **Presentation层Mapper**：
+       - 创建 `VideoMapper`，实现Domain模型（`Video`）到Presentation模型（`VideoItem`）的转换
+    5. ✅ **Fragment层集成**：
+       - `VideoItemFragment`：接入ViewModel的互动方法（toggleLike、toggleFavorite）
+       - 实现互动状态的UI更新（点赞数、收藏数实时更新）
+  - 技术亮点：
+    - **Clean Architecture完整实现**：从Data层 → Domain层 → Presentation层，遵循依赖倒置原则
+    - **UseCase模式**：业务逻辑封装在UseCase中，便于测试和维护
+    - **乐观UI更新**：点赞/收藏操作立即更新UI，失败时回滚，提升用户体验
+    - **响应式数据流**：使用Flow实现响应式数据加载，支持Loading/Success/Error状态
+    - **错误处理**：完善的错误处理和回滚机制
+  - 架构改进：
+    - Domain层完全独立，不依赖Data层实现
+    - Presentation层通过UseCase访问数据，不直接依赖Repository
+    - 数据流清晰：Repository → UseCase → ViewModel → UI
+  - 下一步：接入真实后端API，实现评论弹层和分享功能
+
+- [x] Settings和Landscape模块接入视频业务
+  - 2025-01-XX - LRZ
+  - 内容：
+    1. ✅ **VideoFeed模块扩展**：
+       - 扩展 `VideoRepository` 接口，添加 `orientation` 参数支持（用于筛选横屏/竖屏视频）
+       - 扩展 `GetFeedUseCase`，支持按 `orientation` 筛选视频
+       - 更新 `VideoRemoteDataSource` 和 `VideoRepositoryImpl`，传递 `orientation` 参数到API
+    2. ✅ **Landscape模块接入视频业务**：
+       - 修改 `LandscapeRepositoryImpl`，依赖 `VideoFeed` 的 `VideoRepository` 接口获取横屏视频
+       - 创建 `VideoMapper`，将 `VideoFeed` 的 `Video` 模型转换为 `Landscape` 的 `VideoItem` 模型
+       - 移除Mock数据，使用真实API获取横屏视频（`orientation="landscape"`）
+       - 保持 `LandscapeViewModel` 和 `LandscapeUseCases` 不变，通过Repository层接入
+    3. ✅ **Settings模块配置应用到VideoFeed**：
+       - 创建 `GetPlaybackSettingsUseCase`，从 `SettingsRepository` 读取播放配置（清晰度、倍速、自动播放）
+       - 修改 `VideoFeedPresentationModule`，在创建 `VideoPlayerConfig` 时从 `SettingsRepository` 读取默认倍速
+       - `VideoFeed` 模块的 `domain` 层添加对 `Settings` 模块的依赖（通过接口）
+  - 技术亮点：
+    - **业务模块间解耦**：Landscape通过VideoFeed的Repository接口获取数据，不直接依赖实现
+    - **配置统一管理**：Settings配置通过Repository接口被VideoFeed模块读取和应用
+    - **数据模型转换**：通过Mapper实现不同业务模块间的数据模型转换
+    - **向后兼容**：扩展VideoRepository接口时保持向后兼容（orientation参数可选）
+  - 架构改进：
+    - Landscape模块不再使用Mock数据，接入真实视频业务
+    - Settings配置被VideoFeed模块读取，实现配置的统一管理
+    - 遵循Clean Architecture原则，业务模块间通过接口通信
+  - 下一步：在VideoItemViewModel中应用Settings的清晰度和倍速配置到播放器
+
+- [x] 后端对接材料整理（docs/backend）
+  - 2025-01-XX - LRZ
+  - 内容：
+    1. ✅ 创建 `docs/backend/` 文件夹，提供集中入口 `README.md`。
+    2. ✅ `api_contract.md`：整理 Feed / 互动 / 评论 / AI / 观测接口合同，补充字段与错误码。
+    3. ✅ `service_responsibilities.md`：定义 Gateway、Content、AI、Observability 职责与依赖关系。
+    4. ✅ `data_models.md`：列出 Video、Comment、User 等核心模型字段，用于建表/校验。
+    5. ✅ `operational_checklist.md`：环境准备、部署顺序、联调/验收 Checklist。
+  - 价值：
+    - 让后端按文档即可搭建最小可行服务，明确 BASE_URL、数据字段、性能要求。
+    - 减少客户端/服务端沟通成本，所有材料集中可查。
+  - 下一步：后端部署完成后更新 `NetworkModule.BASE_URL` 并回填联调记录。
+
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 
 

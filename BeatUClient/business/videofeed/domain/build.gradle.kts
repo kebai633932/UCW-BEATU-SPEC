@@ -35,8 +35,14 @@ dependencies {
     // Shared modules
     implementation(project(":shared:common"))
     
+    // Settings domain (for reading playback settings)
+    implementation(project(":business:settings:domain"))
+    
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    
+    // Hilt (for dependency injection in UseCases)
+    implementation(libs.hilt.android)
 }
 

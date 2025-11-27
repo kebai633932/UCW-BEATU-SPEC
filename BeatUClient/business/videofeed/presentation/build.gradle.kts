@@ -41,6 +41,9 @@ dependencies {
     // Business Domain
     implementation(project(":business:videofeed:domain"))
     
+    // Settings domain (for reading playback settings)
+    implementation(project(":business:settings:domain"))
+    
     // Shared modules
     implementation(project(":shared:common"))
     implementation(project(":shared:player"))

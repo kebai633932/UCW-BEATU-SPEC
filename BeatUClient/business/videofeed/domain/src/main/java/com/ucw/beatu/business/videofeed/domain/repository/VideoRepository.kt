@@ -14,9 +14,10 @@ interface VideoRepository {
      * 获取视频列表（分页）
      * @param page 页码，从1开始
      * @param limit 每页数量
+     * @param orientation 视频方向（可选）："portrait"、"landscape"，null表示不筛选
      * @return Flow<AppResult<List<Video>>> 响应式数据流
      */
-    fun getVideoFeed(page: Int = 1, limit: Int = 20): Flow<AppResult<List<Video>>>
+    fun getVideoFeed(page: Int = 1, limit: Int = 20, orientation: String? = null): Flow<AppResult<List<Video>>>
 
     /**
      * 获取视频详情

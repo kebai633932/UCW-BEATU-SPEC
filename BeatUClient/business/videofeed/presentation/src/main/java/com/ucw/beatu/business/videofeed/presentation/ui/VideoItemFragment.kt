@@ -75,19 +75,23 @@ class VideoItemFragment : Fragment() {
         videoItem?.let { item ->
             view.findViewById<android.widget.TextView>(R.id.tv_video_title)?.text = item.title
             view.findViewById<android.widget.TextView>(R.id.tv_channel_name)?.text = item.authorName
-            view.findViewById<android.widget.TextView>(R.id.tv_like_count)?.text = item.likeCount.toString()
-            view.findViewById<android.widget.TextView>(R.id.tv_comment_count)?.text = item.commentCount.toString()
-            view.findViewById<android.widget.TextView>(R.id.tv_favorite_count)?.text = item.favoriteCount.toString()
-            view.findViewById<android.widget.TextView>(R.id.tv_share_count)?.text = item.shareCount.toString()
+            
+            // 初始化互动状态
+            viewModel.initInteractionState(
+                isLiked = false, // TODO: 从VideoItem中获取实际状态
+                isFavorited = false, // TODO: 从VideoItem中获取实际状态
+                likeCount = item.likeCount.toLong(),
+                favoriteCount = item.favoriteCount.toLong()
+            )
         }
 
         observeViewModel()
 
         playButton?.setOnClickListener { viewModel.togglePlayPause() }
-        view.findViewById<View>(R.id.iv_like)?.setOnClickListener { /* TODO */ }
-        view.findViewById<View>(R.id.iv_favorite)?.setOnClickListener { /* TODO */ }
-        view.findViewById<View>(R.id.iv_comment)?.setOnClickListener { /* TODO */ }
-        view.findViewById<View>(R.id.iv_share)?.setOnClickListener { /* TODO */ }
+        view.findViewById<View>(R.id.iv_like)?.setOnClickListener { viewModel.toggleLike() }
+        view.findViewById<View>(R.id.iv_favorite)?.setOnClickListener { viewModel.toggleFavorite() }
+        view.findViewById<View>(R.id.iv_comment)?.setOnClickListener { /* TODO: 打开评论弹层 */ }
+        view.findViewById<View>(R.id.iv_share)?.setOnClickListener { /* TODO: 打开分享弹层 */ }
         view.findViewById<View>(R.id.iv_fullscreen)?.setOnClickListener { openLandscapeMode() }
     }
 
@@ -97,6 +101,19 @@ class VideoItemFragment : Fragment() {
                 viewModel.uiState.collect { state ->
                     playerView?.visibility = View.VISIBLE
                     playButton?.visibility = if (state.isPlaying) View.GONE else View.VISIBLE
+                    
+                    // 更新互动状态UI
+                    view?.findViewById<android.widget.TextView>(R.id.tv_like_count)?.text = state.likeCount.toString()
+                    view?.findViewById<android.widget.TextView>(R.id.tv_favorite_count)?.text = state.favoriteCount.toString()
+                    
+                    // 更新点赞/收藏图标状态（TODO: 需要根据实际布局调整）
+                    // view.findViewById<ImageView>(R.id.iv_like)?.setImageResource(
+                    //     if (state.isLiked) R.drawable.ic_like_filled else R.drawable.ic_like_outline
+                    // )
+                    // view.findViewById<ImageView>(R.id.iv_favorite)?.setImageResource(
+                    //     if (state.isFavorited) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline
+                    // )
+                    
                     state.error?.let { error -> Log.e(TAG, "播放错误: $error") }
                 }
             }

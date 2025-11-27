@@ -15,7 +15,7 @@ import javax.inject.Inject
  * 远程数据源接口
  */
 interface VideoRemoteDataSource {
-    suspend fun getVideoFeed(page: Int, limit: Int): AppResult<List<Video>>
+    suspend fun getVideoFeed(page: Int, limit: Int, orientation: String? = null): AppResult<List<Video>>
     suspend fun getVideoDetail(videoId: String): AppResult<Video>
     suspend fun getComments(videoId: String, page: Int, limit: Int): AppResult<List<Comment>>
     suspend fun likeVideo(videoId: String): AppResult<Unit>
@@ -34,14 +34,14 @@ class VideoRemoteDataSourceImpl @Inject constructor(
     private val connectivityObserver: ConnectivityObserver
 ) : VideoRemoteDataSource {
 
-    override suspend fun getVideoFeed(page: Int, limit: Int): AppResult<List<Video>> {
+    override suspend fun getVideoFeed(page: Int, limit: Int, orientation: String?): AppResult<List<Video>> {
         return runAppResult {
             // 检查网络连接
             if (!connectivityObserver.isConnected()) {
                 throw DataException.NetworkException("No internet connection")
             }
 
-            val response = apiService.getVideoFeed(page, limit)
+            val response = apiService.getVideoFeed(page, limit, orientation)
             val data = response.data
             when {
                 response.isSuccess && data != null -> {

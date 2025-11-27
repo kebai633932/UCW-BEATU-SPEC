@@ -3,18 +3,19 @@ package com.ucw.beatu.business.videofeed.presentation.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.ucw.beatu.business.videofeed.domain.usecase.GetFeedUseCase
+import com.ucw.beatu.business.videofeed.presentation.mapper.toVideoItem
 import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
-import com.ucw.beatu.shared.common.mock.MockVideoCatalog
-import com.ucw.beatu.shared.common.mock.MockVideoCatalog.Orientation.PORTRAIT
-import com.ucw.beatu.shared.common.mock.Video
+import com.ucw.beatu.shared.common.result.AppResult
 import com.ucw.beatu.shared.player.VideoPlayer
 import com.ucw.beatu.shared.player.model.VideoSource
 import com.ucw.beatu.shared.player.pool.VideoPlayerPool
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -32,7 +33,8 @@ data class RecommendUiState(
 @HiltViewModel
 class RecommendViewModel @Inject constructor(
     application: Application,
-    private val playerPool: VideoPlayerPool
+    private val playerPool: VideoPlayerPool,
+    private val getFeedUseCase: GetFeedUseCase
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(RecommendUiState())
@@ -41,7 +43,7 @@ class RecommendViewModel @Inject constructor(
     private var currentPlayer: VideoPlayer? = null
     private var currentVideoId: String? = null
     private var currentPage = 1
-    private val pageSize = 5
+    private val pageSize = 20
     
     init {
         // 初始化时加载视频列表
@@ -49,28 +51,41 @@ class RecommendViewModel @Inject constructor(
     }
 
     /**
-     * 加载视频列表（硬编码测试数据）
+     * 加载视频列表（使用GetFeedUseCase）
      */
     private fun loadVideoList() {
         viewModelScope.launch {
             currentPage = 1
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
-            try {
-                delay(500) // 模拟网络请求延迟
-                
-                val videos = MockVideoCatalog.getPage(PORTRAIT, currentPage, pageSize)
-                    .map { it.toVideoItem() }
-                _uiState.value = _uiState.value.copy(
-                    videoList = videos,
-                    isLoading = false
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = e.message ?: "加载失败"
-                )
-            }
+            getFeedUseCase(currentPage, pageSize)
+                .catch { e ->
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = e.message ?: "加载失败"
+                    )
+                }
+                .collect { result ->
+                    when (result) {
+                        is AppResult.Loading -> {
+                            _uiState.value = _uiState.value.copy(isLoading = true)
+                        }
+                        is AppResult.Success -> {
+                            val videos = result.data.map { it.toVideoItem() }
+                            _uiState.value = _uiState.value.copy(
+                                videoList = videos,
+                                isLoading = false,
+                                error = null
+                            )
+                        }
+                        is AppResult.Error -> {
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = result.message ?: result.throwable.message ?: "加载失败"
+                            )
+                        }
+                    }
+                }
         }
     }
 
@@ -82,21 +97,34 @@ class RecommendViewModel @Inject constructor(
             currentPage = 1
             _uiState.value = _uiState.value.copy(isRefreshing = true, error = null)
             
-            try {
-                delay(1000) // 模拟网络请求延迟
-                
-                val newVideos = MockVideoCatalog.getPage(PORTRAIT, currentPage, pageSize)
-                    .map { it.toVideoItem() }
-                _uiState.value = _uiState.value.copy(
-                    videoList = newVideos,
-                    isRefreshing = false
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isRefreshing = false,
-                    error = e.message ?: "刷新失败"
-                )
-            }
+            getFeedUseCase(currentPage, pageSize)
+                .catch { e ->
+                    _uiState.value = _uiState.value.copy(
+                        isRefreshing = false,
+                        error = e.message ?: "刷新失败"
+                    )
+                }
+                .collect { result ->
+                    when (result) {
+                        is AppResult.Loading -> {
+                            // Loading状态已在开始时设置
+                        }
+                        is AppResult.Success -> {
+                            val videos = result.data.map { it.toVideoItem() }
+                            _uiState.value = _uiState.value.copy(
+                                videoList = videos,
+                                isRefreshing = false,
+                                error = null
+                            )
+                        }
+                        is AppResult.Error -> {
+                            _uiState.value = _uiState.value.copy(
+                                isRefreshing = false,
+                                error = result.message ?: result.throwable.message ?: "刷新失败"
+                            )
+                        }
+                    }
+                }
         }
     }
 
@@ -105,23 +133,40 @@ class RecommendViewModel @Inject constructor(
      */
     fun loadMoreVideos() {
         viewModelScope.launch {
-            try {
-                delay(500) // 模拟网络请求延迟
-                
-                currentPage++
-                val moreVideos = MockVideoCatalog.getPage(PORTRAIT, currentPage, pageSize)
-                    .map { it.toVideoItem() }
-                val currentList = _uiState.value.videoList.toMutableList()
-                currentList.addAll(moreVideos)
-                
-                _uiState.value = _uiState.value.copy(
-                    videoList = currentList
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    error = e.message ?: "加载更多失败"
-                )
-            }
+            // 避免重复加载
+            if (_uiState.value.isLoading) return@launch
+            
+            currentPage++
+            getFeedUseCase(currentPage, pageSize)
+                .catch { e ->
+                    currentPage-- // 回退页码
+                    _uiState.value = _uiState.value.copy(
+                        error = e.message ?: "加载更多失败"
+                    )
+                }
+                .collect { result ->
+                    when (result) {
+                        is AppResult.Loading -> {
+                            // 加载更多时不显示全局loading
+                        }
+                        is AppResult.Success -> {
+                            val moreVideos = result.data.map { it.toVideoItem() }
+                            val currentList = _uiState.value.videoList.toMutableList()
+                            currentList.addAll(moreVideos)
+                            
+                            _uiState.value = _uiState.value.copy(
+                                videoList = currentList,
+                                error = null
+                            )
+                        }
+                        is AppResult.Error -> {
+                            currentPage-- // 回退页码
+                            _uiState.value = _uiState.value.copy(
+                                error = result.message ?: result.throwable.message ?: "加载更多失败"
+                            )
+                        }
+                    }
+                }
         }
     }
 
@@ -138,21 +183,6 @@ class RecommendViewModel @Inject constructor(
         currentVideoId = null
     }
 
-    private fun Video.toVideoItem(): VideoItem =
-        VideoItem(
-            id = id,
-            videoUrl = url,
-            title = title,
-            authorName = author,
-            likeCount = likeCount,
-            commentCount = commentCount,
-            favoriteCount = favoriteCount,
-            shareCount = shareCount,
-            orientation = when (orientation) {
-                MockVideoCatalog.Orientation.PORTRAIT -> com.ucw.beatu.business.videofeed.presentation.model.VideoOrientation.PORTRAIT
-                MockVideoCatalog.Orientation.LANDSCAPE -> com.ucw.beatu.business.videofeed.presentation.model.VideoOrientation.LANDSCAPE
-            }
-        )
 
     fun restoreState(videos: List<VideoItem>, restoredPage: Int) {
         currentPage = restoredPage.coerceAtLeast(1)

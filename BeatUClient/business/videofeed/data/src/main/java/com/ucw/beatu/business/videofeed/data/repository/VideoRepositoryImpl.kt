@@ -23,9 +23,9 @@ class VideoRepositoryImpl @Inject constructor(
     private val localDataSource: VideoLocalDataSource
 ) : VideoRepository {
 
-    override fun getVideoFeed(page: Int, limit: Int): Flow<AppResult<List<Video>>> = flow {
-        // 如果是第一页，先尝试从本地获取并发送
-        if (page == 1) {
+    override fun getVideoFeed(page: Int, limit: Int, orientation: String?): Flow<AppResult<List<Video>>> = flow {
+        // 如果是第一页且没有orientation筛选，先尝试从本地获取并发送
+        if (page == 1 && orientation == null) {
             val localVideos = localDataSource.observeVideos(limit).firstOrNull() ?: emptyList()
             if (localVideos.isNotEmpty()) {
                 emit(AppResult.Success(localVideos))
@@ -33,11 +33,11 @@ class VideoRepositoryImpl @Inject constructor(
         }
 
         // 从远程获取最新数据
-        val remoteResult = remoteDataSource.getVideoFeed(page, limit)
+        val remoteResult = remoteDataSource.getVideoFeed(page, limit, orientation)
         when (remoteResult) {
             is AppResult.Success -> {
-                // 保存到本地缓存（仅第一页）
-                if (page == 1) {
+                // 保存到本地缓存（仅第一页且没有orientation筛选）
+                if (page == 1 && orientation == null) {
                     localDataSource.saveVideos(remoteResult.data)
                 }
                 emit(remoteResult)
