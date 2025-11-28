@@ -338,6 +338,13 @@
       2. `LandscapeVideoItemFragment` 增加 `isCurrentlyVisibleToUser`，`loadVideo()` 完成后根据可见状态决定 `resume()/pause()`，避免不可见 Fragment 自动播放；
       3. `onParentVisibilityChanged()` 由父 Fragment 调用，显式控制 `resume`/`pause` 并输出日志，方便定位。
     - 结果：横屏模式下保证同一时刻只有当前可见的视频在播放，预加载页面不会提前发声。
+  - 2025-11-30 Mock 视频横屏入口控制：
+    - 现象：Mock 数据中横/竖屏字段未对 UI 生效，竖屏 Feed 仍会显示多个横屏入口。
+    - 修复：
+      1. `MockVideoCatalog.getPage()` 支持 `preferredOrientation` nullable，并严格按每条 `orientation` 过滤，保证 Catalog 入参即 UI 行为；
+      2. `VideoRepositoryImpl.buildMockVideos()` 将远端 `orientation` 透传给 MockCatalog，竖屏请求只拿 PORTRAIT 列表，横屏只拿 LANDSCAPE；
+      3. `VideoItemFragment` 控制横屏按钮显示：仅当 `VideoItem.orientation == LANDSCAPE` 时才展示切换按钮。
+    - 效果：竖屏 Feed 仍能播放所有视频，但只对标记为横屏的内容显示横屏入口，逻辑与未来真实后端对齐。
 
 - [x] 视频流网络失败降级到 Mock 数据
   - 2025-11-28 - done by ZX

@@ -6,6 +6,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
@@ -18,6 +19,7 @@ import androidx.navigation.NavController
 import androidx.navigation.fragment.findNavController
 import com.ucw.beatu.business.videofeed.presentation.R
 import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
+import com.ucw.beatu.business.videofeed.presentation.model.VideoOrientation
 import com.ucw.beatu.business.videofeed.presentation.viewmodel.VideoItemViewModel
 import com.ucw.beatu.shared.common.navigation.LandscapeLaunchContract
 import com.ucw.beatu.shared.common.navigation.NavigationHelper
@@ -72,6 +74,7 @@ class VideoItemFragment : Fragment() {
 
         playerView = view.findViewById(R.id.player_view)
         playButton = view.findViewById(R.id.iv_play_button)
+        val fullScreenButton = view.findViewById<View>(R.id.iv_fullscreen)
 
         videoItem?.let { item ->
             view.findViewById<android.widget.TextView>(R.id.tv_video_title)?.text = item.title
@@ -84,6 +87,9 @@ class VideoItemFragment : Fragment() {
                 likeCount = item.likeCount.toLong(),
                 favoriteCount = item.favoriteCount.toLong()
             )
+
+            val isLandscapeVideo = item.orientation == VideoOrientation.LANDSCAPE
+            fullScreenButton.visibility = if (isLandscapeVideo) View.VISIBLE else View.GONE
         }
 
         observeViewModel()
@@ -93,7 +99,7 @@ class VideoItemFragment : Fragment() {
         view.findViewById<View>(R.id.iv_favorite)?.setOnClickListener { viewModel.toggleFavorite() }
         view.findViewById<View>(R.id.iv_comment)?.setOnClickListener { /* TODO: 打开评论弹层 */ }
         view.findViewById<View>(R.id.iv_share)?.setOnClickListener { /* TODO: 打开分享弹层 */ }
-        view.findViewById<View>(R.id.iv_fullscreen)?.setOnClickListener { openLandscapeMode() }
+        fullScreenButton.setOnClickListener { openLandscapeMode() }
 
     }
 

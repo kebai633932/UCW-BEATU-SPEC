@@ -161,25 +161,25 @@ class VideoRepositoryImpl @Inject constructor(
         limit: Int,
         orientation: String?
     ): List<Video> {
-        val mockOrientation = when (orientation?.lowercase()) {
+        val requestOrientation = when (orientation?.lowercase()) {
             "landscape", "horizontal" -> MockVideoCatalog.Orientation.LANDSCAPE
-            else -> MockVideoCatalog.Orientation.PORTRAIT
+            "portrait", "vertical" -> MockVideoCatalog.Orientation.PORTRAIT
+            else -> null
         }
 
         val mockList = MockVideoCatalog.getPage(
-            orientation = mockOrientation,
+            preferredOrientation = requestOrientation,
             page = page,
             pageSize = limit
         )
 
         if (mockList.isEmpty()) return emptyList()
 
-        val orientationString = when (mockOrientation) {
-            MockVideoCatalog.Orientation.LANDSCAPE -> "landscape"
-            MockVideoCatalog.Orientation.PORTRAIT -> "portrait"
-        }
-
         return mockList.map { mock ->
+            val orientationString = when (mock.orientation) {
+                MockVideoCatalog.Orientation.LANDSCAPE -> "landscape"
+                MockVideoCatalog.Orientation.PORTRAIT -> "portrait"
+            }
             Video(
                 id = mock.id,
                 playUrl = mock.url,

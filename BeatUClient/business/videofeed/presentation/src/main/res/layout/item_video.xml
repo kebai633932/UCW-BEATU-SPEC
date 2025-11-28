@@ -14,7 +14,7 @@
         android:visibility="visible"
         app:surface_type="surface_view"
         app:use_controller="false"
-        app:resize_mode="zoom" />
+        app:resize_mode="fit" />
 
     <!-- 播放按钮（覆盖层，播放时隐藏） -->
     <ImageView
@@ -112,16 +112,6 @@
             android:maxLines="2"
             android:ellipsize="end"
             android:layout_marginBottom="12dp" />
-
-        <Button
-            android:id="@+id/btn_switch_landscape"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/video_switch_landscape"
-            android:layout_marginBottom="12dp"
-            android:visibility="gone"
-            android:backgroundTint="#4CAF50"
-            android:textColor="#FFFFFFFF" />
 
         <!-- 频道信息和互动按钮行 -->
         <LinearLayout

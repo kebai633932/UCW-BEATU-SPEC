@@ -37,7 +37,7 @@ object MockVideoCatalog {
             commentCount = 43,
             favoriteCount = 159,
             shareCount = 59,
-            orientation = PORTRAIT
+            orientation = LANDSCAPE
         ),
         Video(
             id = "video_0012",
@@ -48,7 +48,7 @@ object MockVideoCatalog {
             commentCount = 67,
             favoriteCount = 345,
             shareCount = 123,
-            orientation = PORTRAIT
+            orientation = LANDSCAPE
         ),
         Video(
             id = "video_002",
@@ -59,7 +59,7 @@ object MockVideoCatalog {
             commentCount = 89,
             favoriteCount = 567,
             shareCount = 234,
-            orientation = PORTRAIT
+            orientation = LANDSCAPE
         ),
         Video(
             id = "video_003",
@@ -70,7 +70,7 @@ object MockVideoCatalog {
             commentCount = 89,
             favoriteCount = 567,
             shareCount = 234,
-            orientation = PORTRAIT
+            orientation = LANDSCAPE
         ),
         Video(
             id = "video_004",
@@ -81,7 +81,7 @@ object MockVideoCatalog {
             commentCount = 89,
             favoriteCount = 567,
             shareCount = 234,
-            orientation = PORTRAIT
+            orientation = LANDSCAPE
         ),
         Video(
             id = "video_005",
@@ -92,7 +92,7 @@ object MockVideoCatalog {
             commentCount = 89,
             favoriteCount = 567,
             shareCount = 234,
-            orientation = PORTRAIT
+            orientation = LANDSCAPE
         ),
         Video(
             id = "video_006",
@@ -103,7 +103,7 @@ object MockVideoCatalog {
             commentCount = 89,
             favoriteCount = 567,
             shareCount = 234,
-            orientation = PORTRAIT
+            orientation = LANDSCAPE
         ),
         Video(
             id = "video_007",
@@ -174,7 +174,6 @@ object MockVideoCatalog {
     )
 
 
-    /** 显式指定类型避免递归推断失败 */
     private val landscapeVideos: List<Video> = portraitVideos.map { template ->
         template.copy(
             orientation = LANDSCAPE,
@@ -182,16 +181,19 @@ object MockVideoCatalog {
         )
     }
 
+    private val allVideos: List<Video> = (portraitVideos + landscapeVideos).mapIndexed { index, video ->
+        video.copy(id = "${video.id}_base_$index")
+    }
+
     fun getPage(
-        orientation: Orientation,
+        preferredOrientation: Orientation?,
         page: Int,
         pageSize: Int
     ): List<Video> {
 
-        val source: List<Video> = when (orientation) {
-            PORTRAIT -> portraitVideos
-            LANDSCAPE -> landscapeVideos
-        }
+        val source: List<Video> = preferredOrientation?.let { orientation ->
+            allVideos.filter { it.orientation == orientation }
+        } ?: allVideos
 
         if (source.isEmpty() || pageSize <= 0) return emptyList()
 
