@@ -72,6 +72,10 @@ class RecommendViewModel @Inject constructor(
                         }
                         is AppResult.Success -> {
                             val videos = result.data.map { it.toVideoItem() }
+                            android.util.Log.d("RecommendViewModel", "loadVideoList: Success, loaded ${videos.size} videos")
+                            videos.forEachIndexed { index, video ->
+                                android.util.Log.d("RecommendViewModel", "Video[$index]: id=${video.id}, url=${video.videoUrl}, title=${video.title}")
+                            }
                             _uiState.value = _uiState.value.copy(
                                 videoList = videos,
                                 isLoading = false,
@@ -79,9 +83,10 @@ class RecommendViewModel @Inject constructor(
                             )
                         }
                         is AppResult.Error -> {
+                            android.util.Log.e("RecommendViewModel", "loadVideoList: Error - ${result.message ?: result.throwable?.message}", result.throwable)
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
-                                error = result.message ?: result.throwable.message ?: "加载失败"
+                                error = result.message ?: result.throwable?.message ?: "加载失败"
                             )
                         }
                     }

@@ -5,6 +5,7 @@ import com.ucw.beatu.business.videofeed.data.remote.VideoRemoteDataSource
 import com.ucw.beatu.business.videofeed.domain.model.Comment
 import com.ucw.beatu.business.videofeed.domain.model.Video
 import com.ucw.beatu.business.videofeed.domain.repository.VideoRepository
+import com.ucw.beatu.shared.common.mock.MockVideoCatalog
 import com.ucw.beatu.shared.common.result.AppResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -43,8 +44,27 @@ class VideoRepositoryImpl @Inject constructor(
                 emit(remoteResult)
             }
             is AppResult.Error -> {
-                // 如果远程失败且是第一页，且已发送本地数据，不再发送错误
-                // 如果是后续页或没有本地数据，发出错误
+                // 先判断本地是否已经有数据（用于第一页无 orientation 的场景）
+                val hasLocalData = if (page == 1 && orientation == null) {
+                    localDataSource.observeVideos(limit).firstOrNull()?.isNotEmpty() == true
+                } else {
+                    false
+                }
+
+                if (!hasLocalData) {
+                    // ✅ 服务降级：远程失败且本地没有可用数据时，使用 MockVideoCatalog 兜底
+                    val fallbackVideos = buildMockVideos(page, limit, orientation)
+                    if (fallbackVideos.isNotEmpty()) {
+                        // 将 Mock 数据写入本地缓存（仅第一页且无 orientation 筛选），便于后续离线复用
+                        if (page == 1 && orientation == null) {
+                            localDataSource.saveVideos(fallbackVideos)
+                        }
+                        emit(AppResult.Success(fallbackVideos))
+                        return@flow
+                    }
+                }
+
+                // 如果有本地数据或 Mock 也不可用，则保留原有错误降级逻辑
                 if (page != 1 || localDataSource.observeVideos(limit).firstOrNull()?.isEmpty() != false) {
                     emit(remoteResult)
                 }
@@ -130,6 +150,58 @@ class VideoRepositoryImpl @Inject constructor(
                 result
             }
             else -> result
+        }
+    }
+
+    /**
+     * 将 MockVideoCatalog 中的数据映射为领域层 Video，用于网络失败时的服务降级兜底。
+     */
+    private fun buildMockVideos(
+        page: Int,
+        limit: Int,
+        orientation: String?
+    ): List<Video> {
+        val mockOrientation = when (orientation?.lowercase()) {
+            "landscape", "horizontal" -> MockVideoCatalog.Orientation.LANDSCAPE
+            else -> MockVideoCatalog.Orientation.PORTRAIT
+        }
+
+        val mockList = MockVideoCatalog.getPage(
+            orientation = mockOrientation,
+            page = page,
+            pageSize = limit
+        )
+
+        if (mockList.isEmpty()) return emptyList()
+
+        val orientationString = when (mockOrientation) {
+            MockVideoCatalog.Orientation.LANDSCAPE -> "landscape"
+            MockVideoCatalog.Orientation.PORTRAIT -> "portrait"
+        }
+
+        return mockList.map { mock ->
+            Video(
+                id = mock.id,
+                playUrl = mock.url,
+                coverUrl = "", // Mock 数据暂不提供封面，可后续扩展
+                title = mock.title,
+                tags = emptyList(),
+                durationMs = 0L, // 未知时长，播放器会在 Ready 后更新 UI
+                orientation = orientationString,
+                authorId = "", // Mock 数据暂无作者 ID，仅展示名称
+                authorName = mock.author,
+                authorAvatar = null,
+                likeCount = mock.likeCount.toLong(),
+                commentCount = mock.commentCount.toLong(),
+                favoriteCount = mock.favoriteCount.toLong(),
+                shareCount = mock.shareCount.toLong(),
+                viewCount = 0L,
+                isLiked = false,
+                isFavorited = false,
+                isFollowedAuthor = false,
+                createdAt = null,
+                updatedAt = null
+            )
         }
     }
 }

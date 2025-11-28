@@ -98,8 +98,10 @@ class VideoItemViewModel @Inject constructor(
     fun preparePlayer(videoId: String, videoUrl: String, playerView: PlayerView) {
         viewModelScope.launch {
             try {
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: videoId=$videoId, videoUrl=$videoUrl")
                 // 检查参数有效性
                 if (videoId.isBlank() || videoUrl.isBlank()) {
+                    android.util.Log.e("VideoItemViewModel", "preparePlayer: 视频ID或URL为空 - videoId=$videoId, videoUrl=$videoUrl")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = "视频ID或URL为空",
@@ -113,14 +115,17 @@ class VideoItemViewModel @Inject constructor(
                     url = videoUrl
                 )
 
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: acquiring player for videoId=$videoId")
                 val player = playerPool.acquire(videoId)
                 currentPlayer = player
                 currentVideoUrl = videoUrl
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: player acquired, attaching to PlayerView")
 
                 // 添加监听器
                 playerListener?.let { player.removeListener(it) }
                 val listener = object : VideoPlayer.Listener {
                     override fun onReady(videoId: String) {
+                        android.util.Log.d("VideoItemViewModel", "onReady: videoId=$videoId")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             showPlaceholder = false,
@@ -139,6 +144,7 @@ class VideoItemViewModel @Inject constructor(
                     }
 
                     override fun onPlaybackEnded(videoId: String) {
+                        android.util.Log.d("VideoItemViewModel", "onPlaybackEnded: videoId=$videoId")
                         _uiState.value = _uiState.value.copy(
                             isPlaying = false
                         )
@@ -148,20 +154,24 @@ class VideoItemViewModel @Inject constructor(
                 playerListener = listener
 
                 // 绑定播放器到 PlayerView
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: attaching player to PlayerView")
                 player.attach(playerView)
 
                 val pendingSession = playbackSessionStore.consume(videoId)
                 handoffInProgress = pendingSession != null
                 if (pendingSession != null) {
+                    android.util.Log.d("VideoItemViewModel", "preparePlayer: applying pending session for videoId=$videoId")
                     applyPlaybackSession(player, pendingSession)
                 } else {
+                    android.util.Log.d("VideoItemViewModel", "preparePlayer: preparing videoId=$videoId, url=$videoUrl (not playing yet, will play when fragment is visible)")
                     player.prepare(source)
-                    player.play()
+                    // ✅ 修复：不立即播放，等待 Fragment 真正可见时再播放（由 checkVisibilityAndPlay() 触发）
+                    // player.play() 将在 Fragment 可见时由 resume() 或 startPlaybackIfNeeded() 调用
                 }
 
                 _uiState.value = _uiState.value.copy(
                     currentVideoId = videoId,
-                    isPlaying = true
+                    isPlaying = false  // ✅ 修复：初始状态为 false，等待 Fragment 可见时再设置为 true
                 )
                 startProgressUpdates()
 

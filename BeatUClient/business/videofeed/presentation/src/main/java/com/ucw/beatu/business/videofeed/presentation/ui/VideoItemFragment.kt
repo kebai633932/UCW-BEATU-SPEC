@@ -120,16 +120,17 @@ class VideoItemFragment : Fragment() {
         }
     }
 
-    // ✅ 修复：onStart() 逻辑
+    // ✅ 修复：onStart() 逻辑 - 只准备播放器，不立即播放
     override fun onStart() {
         super.onStart()
         if (viewModel.uiState.value.currentVideoId != null) {
             // 横屏返回，恢复播放器
             reattachPlayer()
         } else {
-            // 首次加载
+            // 首次加载 - 只准备播放器，不立即播放
             preparePlayerForFirstTime()
         }
+        // ✅ 修复：不在这里立即播放，等待 Fragment 真正可见时再播放（由 handlePageSelected() 触发）
     }
 
     override fun onResume() {
@@ -176,6 +177,7 @@ class VideoItemFragment : Fragment() {
      */
     fun checkVisibilityAndPlay() {
         if (isViewVisibleOnScreen()) {
+            Log.d(TAG, "checkVisibilityAndPlay: Fragment is visible, starting playback")
             startPlaybackIfNeeded()
         } else {
             if (hasPreparedPlayer) {
@@ -238,8 +240,12 @@ class VideoItemFragment : Fragment() {
         }
 
         if (!hasPreparedPlayer || forcePrepare) {
+            Log.d(TAG, "startPlaybackIfNeeded: preparing player for first time")
             preparePlayerForFirstTime()
+            // ✅ 修复：准备完成后立即播放（此时 Fragment 已经可见）
+            viewModel.resume()
         } else {
+            Log.d(TAG, "startPlaybackIfNeeded: player already prepared, resuming")
             viewModel.resume()
         }
     }
