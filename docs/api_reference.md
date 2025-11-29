@@ -11,7 +11,9 @@
 | `VideoStats` | `likeCount: Long`, `commentCount: Long`, `favoriteCount: Long`, `shareCount: Long`, `viewCount: Long`, `isLiked: Boolean`, `isFavorited: Boolean`, `isFollowedAuthor: Boolean` | UI 状态 |
 | `Comment` | `id`, `videoId`, `author: UserSummary`, `content`, `createdAt`, `isAiReply: Boolean`, `aiMeta?: AiMeta` | 评论 / AI 回复 |
 | `AiMeta` | `model: String`, `confidence: Double`, `source: String` | AI 答案描述 |
+| `User` | `id`, `avatarUrl`, `name`, `bio`, `likesCount`, `followingCount`, `followersCount` | 个人主页核心字段，映射 `UserEntity` |
 | `UserSummary` | `id`, `nickname`, `avatarUrl`, `bio`, `followStatus` | 个人信息概览 |
+| `UserVideoRelation` | `id (auto)`, `userId`, `videoId` | 用户与作品的连接表 |
 | `InteractionState` | `videoId`, `liked`, `favorited`, `followed`, `lastSeekMs`, `defaultSpeed`, `defaultQuality` | 本地缓存 |
 
 ### 2. BeatUGateway（对客户端暴露）
