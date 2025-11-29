@@ -74,6 +74,7 @@ class SearchFragment : Fragment() {
         clearButton = view.findViewById(R.id.btn_clear)
         backButton = view.findViewById(R.id.btn_back)
         searchButton = view.findViewById(R.id.tv_search)
+        scrollBeforeSearch = view.findViewById(R.id.scroll_before_search)
         llSearchHistory = view.findViewById(R.id.ll_search_history)
         llHotSearch = view.findViewById(R.id.ll_hot_search)
         rvSearchSuggestions = view.findViewById(R.id.rv_search_suggestions)

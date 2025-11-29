@@ -513,7 +513,7 @@
   - 下一步：后端部署完成后更新 `NetworkModule.BASE_URL` 并回填联调记录。
 
 
-- [ ] 搜索/AI 搜索多页面 UI 设计与实现  
+- [x] 搜索/AI 搜索多页面 UI 设计与实现  
   - 2025-11-28 - done by KJH
   - 需求：补齐搜索体系的 4 个核心页面 —— 搜索首页、AI 搜索首页、常规搜索结果页、AI 搜索结果页，保证切面与 Feed、导航一致，并解决搜索输入导致崩溃/退出的问题。  
   - 方案：
@@ -524,12 +524,30 @@
   - 当前进展：
     - ✅ 统一头部布局 + 交互；
     - ✅ 搜索按钮跳转逻辑恢复；
-    - 搜索输入崩溃问题解决；
     - ✅ 状态栏遮挡问题解决。
   - 下一步：接入真实搜索/AI 数据、补全过滤/推荐策略，并将实现结果回填 `docs/api_reference.md` 与交互文档。
 
+- [x] 修复搜索框不能输入文本的bug
+    - 2025-11-29 - done by KJH
+    - kotlin.UninitializedPropertyAccessException: lateinit property scrollBeforeSearch has not been initialized
+    - scrollBeforeSearch 来自 fragment_search.xml 的 @id/scroll_before_search，但在 initViews() 里没有 findViewById，
+    - 导致第一次调用 switchToState()（比如输入文字时）直接访问未初始化的 lateinit，抛出 UninitializedPropertyAccessException
+    - 解决：补充 findViewById 方法
+
+- [ ] 修复点击搜索不能跳转搜索结果页的bug
+    - 2025-11-29 - done by KJH
+    - 成果：
+
+- [ ] 修复点击ai搜索不能跳转ai搜索结果页的bug
+    - 2025-11-29 - done by KJH
+    - 成果：
+
+- [ ] 优化ai搜索页面UI，使用流传输ai对话与历史记录
+    - 2025-11-29 - done by KJH
+    - 成果：
+
 - [ ] 个人主页的视频流点击视频首页进入对应视频列表的视频观看
-    - 2025-11-28 - done by KJH
+    - 2025-11-29 - 
     - 成果：
 
 - [ ] 视频播放的暂停，进度条，主页的按钮交互
