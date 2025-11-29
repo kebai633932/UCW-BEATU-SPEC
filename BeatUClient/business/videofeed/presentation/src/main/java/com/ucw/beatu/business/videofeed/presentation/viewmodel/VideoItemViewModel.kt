@@ -64,6 +64,7 @@ class VideoItemViewModel @Inject constructor(
     private var currentVideoUrl: String? = null
     private var progressJob: Job? = null
     private var playerListener: VideoPlayer.Listener? = null
+    private var exoPlayerListener: Player.Listener? = null
     private var handoffInProgress = false
 
     /**
@@ -98,10 +99,10 @@ class VideoItemViewModel @Inject constructor(
     fun preparePlayer(videoId: String, videoUrl: String, playerView: PlayerView) {
         viewModelScope.launch {
             try {
-                android.util.Log.d("VideoItemViewModel", "preparePlayer: videoId=$videoId, videoUrl=$videoUrl")
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: 视频ID=$videoId，视频URL=$videoUrl")
                 // 检查参数有效性
                 if (videoId.isBlank() || videoUrl.isBlank()) {
-                    android.util.Log.e("VideoItemViewModel", "preparePlayer: 视频ID或URL为空 - videoId=$videoId, videoUrl=$videoUrl")
+                    android.util.Log.e("VideoItemViewModel", "preparePlayer: 视频ID或URL为空，视频ID=$videoId，视频URL=$videoUrl")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = "视频ID或URL为空",
@@ -115,27 +116,30 @@ class VideoItemViewModel @Inject constructor(
                     url = videoUrl
                 )
 
-                android.util.Log.d("VideoItemViewModel", "preparePlayer: acquiring player for videoId=$videoId")
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: 正在获取播放器，视频ID=$videoId")
                 val player = playerPool.acquire(videoId)
                 currentPlayer = player
                 currentVideoUrl = videoUrl
-                android.util.Log.d("VideoItemViewModel", "preparePlayer: player acquired, attaching to PlayerView")
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: 播放器已获取，正在绑定到 PlayerView")
 
                 // 添加监听器
                 playerListener?.let { player.removeListener(it) }
                 val listener = object : VideoPlayer.Listener {
                     override fun onReady(videoId: String) {
-                        android.util.Log.d("VideoItemViewModel", "onReady: videoId=$videoId")
+                        android.util.Log.d("VideoItemViewModel", "onReady: 视频ID=$videoId，播放状态=${player.player.playbackState}，是否准备播放=${player.player.playWhenReady}")
+                        // 同步播放状态：只有当 playWhenReady=true 且 playbackState=READY 时才认为正在播放
+                        val isActuallyPlaying = player.player.playWhenReady && player.player.playbackState == Player.STATE_READY
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             showPlaceholder = false,
-                            isPlaying = true,
+                            isPlaying = isActuallyPlaying,
                             durationMs = player.player.duration.takeIf { it > 0 } ?: _uiState.value.durationMs
                         )
+                        android.util.Log.d("VideoItemViewModel", "onReady: 已更新 isPlaying=$isActuallyPlaying")
                     }
 
                     override fun onError(videoId: String, throwable: Throwable) {
-                        android.util.Log.e("VideoItemViewModel", "Player error for $videoId", throwable)
+                        android.util.Log.e("VideoItemViewModel", "播放器错误，视频ID=$videoId", throwable)
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             error = throwable.message ?: "播放失败",
@@ -144,7 +148,7 @@ class VideoItemViewModel @Inject constructor(
                     }
 
                     override fun onPlaybackEnded(videoId: String) {
-                        android.util.Log.d("VideoItemViewModel", "onPlaybackEnded: videoId=$videoId")
+                        android.util.Log.d("VideoItemViewModel", "onPlaybackEnded: 视频ID=$videoId")
                         _uiState.value = _uiState.value.copy(
                             isPlaying = false
                         )
@@ -152,19 +156,45 @@ class VideoItemViewModel @Inject constructor(
                 }
                 player.addListener(listener)
                 playerListener = listener
+                
+                // 移除之前的 ExoPlayer 监听器
+                exoPlayerListener?.let { player.player.removeListener(it) }
+                
+                // 添加 ExoPlayer 状态监听，确保 isPlaying 与 playWhenReady 同步
+                val exoListener = object : Player.Listener {
+                    override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                        android.util.Log.d("VideoItemViewModel", "onPlayWhenReadyChanged: 是否准备播放=$playWhenReady，原因=$reason，播放状态=${player.player.playbackState}")
+                        val isActuallyPlaying = playWhenReady && player.player.playbackState == Player.STATE_READY
+                        if (_uiState.value.isPlaying != isActuallyPlaying) {
+                            android.util.Log.d("VideoItemViewModel", "onPlayWhenReadyChanged: 正在同步 isPlaying，从 ${_uiState.value.isPlaying} 到 $isActuallyPlaying")
+                            _uiState.value = _uiState.value.copy(isPlaying = isActuallyPlaying)
+                        }
+                    }
+                    
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        android.util.Log.d("VideoItemViewModel", "onPlaybackStateChanged: 播放状态=$playbackState，是否准备播放=${player.player.playWhenReady}")
+                        val isActuallyPlaying = player.player.playWhenReady && playbackState == Player.STATE_READY
+                        if (_uiState.value.isPlaying != isActuallyPlaying && playbackState == Player.STATE_READY) {
+                            android.util.Log.d("VideoItemViewModel", "onPlaybackStateChanged: 正在同步 isPlaying，从 ${_uiState.value.isPlaying} 到 $isActuallyPlaying")
+                            _uiState.value = _uiState.value.copy(isPlaying = isActuallyPlaying)
+                        }
+                    }
+                }
+                player.player.addListener(exoListener)
+                exoPlayerListener = exoListener
 
                 // 绑定播放器到 PlayerView
-                android.util.Log.d("VideoItemViewModel", "preparePlayer: attaching player to PlayerView")
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: 正在将播放器绑定到 PlayerView")
                 player.attach(playerView)
-                android.util.Log.d("VideoItemViewModel", "preparePlayer: attached player to PlayerView, playerView.player=${playerView.player}")
+                android.util.Log.d("VideoItemViewModel", "preparePlayer: 播放器已绑定到 PlayerView，playerView.player=${playerView.player}")
 
                 val pendingSession = playbackSessionStore.consume(videoId)
                 handoffInProgress = pendingSession != null
                 if (pendingSession != null) {
-                    android.util.Log.d("VideoItemViewModel", "preparePlayer: applying pending session for videoId=$videoId")
+                    android.util.Log.d("VideoItemViewModel", "preparePlayer: 正在应用待处理的会话，视频ID=$videoId")
                     applyPlaybackSession(player, pendingSession)
                 } else {
-                    android.util.Log.d("VideoItemViewModel", "preparePlayer: preparing videoId=$videoId, url=$videoUrl (waiting for visibility)")
+                    android.util.Log.d("VideoItemViewModel", "preparePlayer: 正在准备视频，视频ID=$videoId，URL=$videoUrl（等待可见性）")
                     player.prepare(source)
                 }
 
@@ -175,7 +205,7 @@ class VideoItemViewModel @Inject constructor(
                 startProgressUpdates()
 
             } catch (e: Exception) {
-                android.util.Log.e("VideoItemViewModel", "Error preparing player", e)
+                android.util.Log.e("VideoItemViewModel", "准备播放器时出错", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "播放器初始化失败",
@@ -190,12 +220,17 @@ class VideoItemViewModel @Inject constructor(
      */
     fun togglePlayPause() {
         currentPlayer?.let { player ->
-            if (_uiState.value.isPlaying) {
+            val currentIsPlaying = _uiState.value.isPlaying
+            android.util.Log.d("VideoItemViewModel", "togglePlayPause: 当前是否正在播放=$currentIsPlaying，播放状态=${player.player.playbackState}，是否准备播放=${player.player.playWhenReady}")
+            if (currentIsPlaying) {
                 player.pause()
                 _uiState.value = _uiState.value.copy(isPlaying = false)
             } else {
                 player.play()
-                _uiState.value = _uiState.value.copy(isPlaying = true)
+                // 同步状态：只有当播放器准备好时才设置 isPlaying=true
+                val isActuallyPlaying = player.player.playWhenReady && player.player.playbackState == Player.STATE_READY
+                _uiState.value = _uiState.value.copy(isPlaying = isActuallyPlaying)
+                android.util.Log.d("VideoItemViewModel", "togglePlayPause: 已更新 isPlaying=$isActuallyPlaying")
             }
         }
     }
@@ -205,7 +240,7 @@ class VideoItemViewModel @Inject constructor(
      */
     fun pause() {
         currentPlayer?.let {
-            android.util.Log.d("VideoItemViewModel", "pause: videoId=${currentVideoId}")
+            android.util.Log.d("VideoItemViewModel", "pause: 视频ID=${currentVideoId}")
             it.pause()
         }
         _uiState.value = _uiState.value.copy(isPlaying = false)
@@ -215,27 +250,59 @@ class VideoItemViewModel @Inject constructor(
      * 恢复播放
      */
     fun resume() {
-        currentPlayer?.let {
-            android.util.Log.d("VideoItemViewModel", "resume: videoId=${currentVideoId}, player=${it.player}")
-            it.play()
+        currentPlayer?.let { player ->
+            android.util.Log.d("VideoItemViewModel", "resume: 视频ID=${currentVideoId}，播放状态=${player.player.playbackState}，是否准备播放=${player.player.playWhenReady}")
+            player.play()
+            // 同步状态：只有当播放器真正准备好时才设置 isPlaying=true
+            val isActuallyPlaying = player.player.playWhenReady && player.player.playbackState == Player.STATE_READY
+            _uiState.value = _uiState.value.copy(isPlaying = isActuallyPlaying)
+            android.util.Log.d("VideoItemViewModel", "resume: 已更新 isPlaying=$isActuallyPlaying")
+        } ?: run {
+            android.util.Log.w("VideoItemViewModel", "resume: 当前播放器为空")
+            _uiState.value = _uiState.value.copy(isPlaying = false)
         }
-        _uiState.value = _uiState.value.copy(isPlaying = true)
     }
 
     /**
      * 将当前播放器重新绑定到新的 PlayerView（例如横竖屏切回）。
      */
     fun onHostResume(targetView: PlayerView?) {
-        if (targetView == null) return
-        val videoId = currentVideoId ?: return
-        val player = currentPlayer ?: playerPool.acquire(videoId).also { currentPlayer = it }
+        if (targetView == null) {
+            android.util.Log.w("VideoItemViewModel", "onHostResume: 目标视图为空")
+            return
+        }
+        val videoId = currentVideoId ?: run {
+            android.util.Log.w("VideoItemViewModel", "onHostResume: 当前视频ID为空")
+            return
+        }
+        
+        android.util.Log.d("VideoItemViewModel", "onHostResume: 视频ID=$videoId，targetView.player=${targetView.player}")
+        
+        val player = currentPlayer ?: playerPool.acquire(videoId).also { 
+            currentPlayer = it
+            android.util.Log.d("VideoItemViewModel", "onHostResume: 从池中获取新播放器")
+        }
+        
+        // 检查播放器是否已经 attach 到其他 PlayerView
+        if (targetView.player != null && targetView.player !== player.player) {
+            android.util.Log.d("VideoItemViewModel", "onHostResume: 正在从目标视图分离之前的播放器")
+            targetView.player = null
+        }
+        
+        // Attach 播放器到新的 PlayerView
+        android.util.Log.d("VideoItemViewModel", "onHostResume: 正在将播放器绑定到目标视图，播放状态=${player.player.playbackState}，是否准备播放=${player.player.playWhenReady}")
         player.attach(targetView)
+        android.util.Log.d("VideoItemViewModel", "onHostResume: 播放器已绑定，targetView.player=${targetView.player}")
 
-        playbackSessionStore.consume(videoId)?.let {
-            applyPlaybackSession(player, it)
+        playbackSessionStore.consume(videoId)?.let { session ->
+            android.util.Log.d("VideoItemViewModel", "onHostResume: 正在应用会话，位置=${session.positionMs}ms，是否准备播放=${session.playWhenReady}")
+            applyPlaybackSession(player, session)
             handoffInProgress = false
         } ?: run {
-            if (_uiState.value.isPlaying) {
+            // 如果没有 session，根据当前状态决定是否播放
+            val shouldPlay = _uiState.value.isPlaying
+            android.util.Log.d("VideoItemViewModel", "onHostResume: 无会话，是否应该播放=$shouldPlay，播放状态=${player.player.playbackState}")
+            if (shouldPlay && player.player.playbackState == Player.STATE_READY) {
                 player.play()
             }
         }
@@ -253,6 +320,12 @@ class VideoItemViewModel @Inject constructor(
             currentPlayer?.removeListener(listener)
         }
         playerListener = null
+        
+        exoPlayerListener?.let { listener ->
+            currentPlayer?.player?.removeListener(listener)
+        }
+        exoPlayerListener = null
+        
         currentVideoId?.let { videoId ->
             playerPool.release(videoId)
         }
@@ -293,7 +366,9 @@ class VideoItemViewModel @Inject constructor(
     }
 
     private fun applyPlaybackSession(player: VideoPlayer, session: PlaybackSession) {
+        android.util.Log.d("VideoItemViewModel", "applyPlaybackSession: 视频ID=${session.videoId}，位置=${session.positionMs}ms，是否准备播放=${session.playWhenReady}，播放状态=${player.player.playbackState}")
         if (player.player.currentMediaItem == null) {
+            android.util.Log.d("VideoItemViewModel", "applyPlaybackSession: 正在准备新的媒体项")
             player.prepare(VideoSource(session.videoId, session.videoUrl))
         }
         player.seekTo(session.positionMs)
@@ -303,13 +378,16 @@ class VideoItemViewModel @Inject constructor(
         } else {
             player.pause()
         }
+        // 同步状态：只有当播放器准备好且 playWhenReady=true 时才认为正在播放
+        val isActuallyPlaying = session.playWhenReady && player.player.playbackState == Player.STATE_READY
         _uiState.value = _uiState.value.copy(
             isLoading = false,
             showPlaceholder = false,
-            isPlaying = session.playWhenReady,
+            isPlaying = isActuallyPlaying,
             currentPositionMs = session.positionMs,
             currentSpeed = session.speed
         )
+        android.util.Log.d("VideoItemViewModel", "applyPlaybackSession: 已更新 isPlaying=$isActuallyPlaying")
     }
 
     private fun startProgressUpdates() {

@@ -47,6 +47,7 @@ class VideoItemFragment : Fragment() {
 
     private var playerView: PlayerView? = null
     private var playButton: View? = null
+    private var bottomInteractionBar: View? = null
     private var videoItem: VideoItem? = null
     private var navigatingToLandscape = false
     private var hasPreparedPlayer = false
@@ -74,6 +75,7 @@ class VideoItemFragment : Fragment() {
 
         playerView = view.findViewById(R.id.player_view)
         playButton = view.findViewById(R.id.iv_play_button)
+        bottomInteractionBar = view.findViewById(R.id.bottom_interaction)
         val fullScreenButton = view.findViewById<View>(R.id.iv_fullscreen)
 
         videoItem?.let { item ->
@@ -94,9 +96,42 @@ class VideoItemFragment : Fragment() {
 
         observeViewModel()
 
-        // 单击播放区域：切换播放/暂停
-        playerView?.setOnClickListener {
+        // 单击播放区域：切换播放/暂停（排除底部导航栏区域）
+        // 由于底部导航栏在布局中位于 PlayerView 之上，点击底部导航栏时会优先触发底部导航栏的事件
+        // 所以只需要在 PlayerView 的点击事件中判断即可
+        playerView?.setOnClickListener { v ->
+            // 获取点击时的坐标（使用 View 的 tag 存储最后一次触摸坐标）
+            val touchPoint = v.tag as? android.graphics.PointF
+            
+            // 检查点击位置是否在底部导航栏区域内
+            val bottomBar = bottomInteractionBar
+            if (bottomBar != null && bottomBar.visibility == View.VISIBLE && touchPoint != null) {
+                val barLocation = IntArray(2)
+                bottomBar.getLocationOnScreen(barLocation)
+                
+                val barLeft = barLocation[0]
+                val barTop = barLocation[1]
+                val barRight = barLeft + bottomBar.width
+                val barBottom = barTop + bottomBar.height
+                
+                // 如果点击位置在底部导航栏内，不触发播放/暂停
+                if (touchPoint.x >= barLeft && touchPoint.x <= barRight && 
+                    touchPoint.y >= barTop && touchPoint.y <= barBottom) {
+                    return@setOnClickListener
+                }
+            }
+            // 点击位置不在底部导航栏内，触发播放/暂停
             viewModel.togglePlayPause()
+        }
+        
+        // 记录触摸坐标，用于 onClick 时判断位置
+        playerView?.setOnTouchListener { v, event ->
+            if (event.action == android.view.MotionEvent.ACTION_DOWN) {
+                // 保存触摸坐标到 View 的 tag 中
+                v.tag = android.graphics.PointF(event.rawX, event.rawY)
+            }
+            // 返回 false，让事件继续传递，不拦截其他 View 的点击
+            false
         }
 
         playButton?.setOnClickListener { viewModel.togglePlayPause() }
@@ -119,13 +154,25 @@ class VideoItemFragment : Fragment() {
                     view?.findViewById<android.widget.TextView>(R.id.tv_like_count)?.text = state.likeCount.toString()
                     view?.findViewById<android.widget.TextView>(R.id.tv_favorite_count)?.text = state.favoriteCount.toString()
                     
-                    // 更新点赞/收藏图标状态（TODO: 需要根据实际布局调整）
-                    // view.findViewById<ImageView>(R.id.iv_like)?.setImageResource(
-                    //     if (state.isLiked) R.drawable.ic_like_filled else R.drawable.ic_like_outline
-                    // )
-                    // view.findViewById<ImageView>(R.id.iv_favorite)?.setImageResource(
-                    //     if (state.isFavorited) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline
-                    // )
+                    // 更新点赞图标状态（通过 selected 状态切换 selector）
+                    view?.findViewById<android.widget.ImageView>(R.id.iv_like)?.apply {
+                        isSelected = state.isLiked
+                        // 已点赞时使用粉红色，未点赞时使用白色
+                        setColorFilter(
+                            if (state.isLiked) android.graphics.Color.parseColor("#FFFF69B4") // 粉红色
+                            else android.graphics.Color.parseColor("#FFFFFFFF") // 白色
+                        )
+                    }
+                    
+                    // 更新收藏图标状态
+                    view?.findViewById<android.widget.ImageView>(R.id.iv_favorite)?.apply {
+                        isSelected = state.isFavorited
+                        // 已收藏时使用黄色，未收藏时使用白色
+                        setColorFilter(
+                            if (state.isFavorited) android.graphics.Color.parseColor("#FFFFFF00") // 黄色
+                            else android.graphics.Color.parseColor("#FFFFFFFF") // 白色
+                        )
+                    }
                     
                     state.error?.let { error -> Log.e(TAG, "播放错误: $error") }
                 }
@@ -176,6 +223,7 @@ class VideoItemFragment : Fragment() {
         }
         playerView = null
         playButton = null
+        bottomInteractionBar = null
     }
 
     fun onParentVisibilityChanged(isVisible: Boolean) {
@@ -285,8 +333,9 @@ class VideoItemFragment : Fragment() {
         if (!isAdded) return
         val item = videoItem ?: return
         val pv = playerView ?: return
-        Log.d(TAG, "reattachPlayer: re-preparing video ${item.id}")
-        viewModel.preparePlayer(item.id, item.videoUrl, pv)
+        Log.d(TAG, "reattachPlayer: host resume for video ${item.id}")
+        // 使用 ViewModel 的 onHostResume，从 PlaybackSession 恢复进度/倍速并继续播放
+        viewModel.onHostResume(pv)
         hasPreparedPlayer = true
         Log.d(TAG, "reattachPlayer: hasPreparedPlayer=$hasPreparedPlayer, playerView.player=${pv.player}")
     }
