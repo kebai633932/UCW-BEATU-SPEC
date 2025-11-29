@@ -1,7 +1,7 @@
 # 核心原则与工作流
 
 ## 核心原则
-- 目标：实现沉浸式视频流 App，但更重要的是以架构、性能、交互和 AI 融合展示团队级工程能力，让评审一眼看到技术深度。
+- 目标：实现沉浸式视频流 App，但更重要的是以架构、性能、交互和 AI 融合展示团队级工程能力和技术深度。
 - **文档优先**：开始任何任务前必须先阅读并对齐以下文档——`README.md`、`docs/getting_started.md`、`docs/architecture.md`、`docs/development_plan.md`、`docs/api_reference.md`。
 - 所有改动需要明确技术亮点及可量化指标（含基准数据、Profiler 截图、视频播放性能数据）。
 

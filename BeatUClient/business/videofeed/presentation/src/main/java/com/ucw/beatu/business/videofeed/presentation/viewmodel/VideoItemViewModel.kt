@@ -312,6 +312,16 @@ class VideoItemViewModel @Inject constructor(
     fun mediaPlayer(): Player? = currentPlayer?.player
 
     /**
+     * Seek 到指定位置（毫秒），供进度条拖动调用
+     */
+    fun seekTo(positionMs: Long) {
+        val player = currentPlayer ?: return
+        val safePosition = positionMs.coerceAtLeast(0L)
+        player.seekTo(safePosition)
+        _uiState.value = _uiState.value.copy(currentPositionMs = safePosition)
+    }
+
+    /**
      * 释放当前播放器
      */
     fun releaseCurrentPlayer() {
