@@ -238,11 +238,18 @@ class SearchFragment : Fragment() {
      */
     private fun navigateToSearchResult(query: String) {
         runCatching {
-                NavigationHelper.navigateByStringId(
-                    findNavController(),
-                    NavigationIds.ACTION_SEARCH_TO_SEARCH_RESULT,
-                    requireContext()
-                )
+            val args = bundleOf("search_query" to query)
+            val navController = findNavController()
+            val context = requireContext()
+            val actionId = NavigationHelper.getResourceId(
+                context,
+                NavigationIds.ACTION_SEARCH_TO_SEARCH_RESULT
+            )
+            if (actionId != 0) {
+                navController.navigate(actionId, args)
+            } else {
+                navController.navigateUp()
+            }
         }.onFailure {
             findNavController().navigateUp()
         }
@@ -254,11 +261,21 @@ class SearchFragment : Fragment() {
     private fun navigateToAiSearch(initialPrompt: String? = null) {
         val args = initialPrompt?.let { bundleOf("ai_query" to it) }
         runCatching {
-            NavigationHelper.navigateByStringId(
-                findNavController(),
-                NavigationIds.ACTION_SEARCH_TO_AI_SEARCH,
-                requireContext()
+            val navController = findNavController()
+            val context = requireContext()
+            val actionId = NavigationHelper.getResourceId(
+                context,
+                NavigationIds.ACTION_SEARCH_TO_AI_SEARCH
             )
+            if (actionId != 0) {
+                if (args != null) {
+                    navController.navigate(actionId, args)
+                } else {
+                    navController.navigate(actionId)
+                }
+            } else {
+                navController.navigateUp()
+            }
         }.onFailure {
             findNavController().navigateUp()
         }

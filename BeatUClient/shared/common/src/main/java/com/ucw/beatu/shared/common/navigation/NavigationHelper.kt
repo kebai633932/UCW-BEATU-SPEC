@@ -1,7 +1,6 @@
 package com.ucw.beatu.shared.common.navigation
 
 import android.content.Context
-import android.os.Bundle
 import androidx.navigation.NavController
 
 /**

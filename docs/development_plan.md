@@ -540,11 +540,13 @@
            但当时的 `item_search_result.xml` 里并没有 `@+id/tv_duration`
     - 解决：补充 @+id/tv_duration
 
-- [ ] 修复点击ai搜索不能跳转ai搜索结果页的bug
+- [x] 修复点击ai搜索不能跳转ai搜索结果页的bug
     - 2025-11-29 - done by KJH
-    - 现象：java.lang.NullPointerException: findViewById(...) must not be null。SearchResultFragment 的 ResultViewHolder
-      但当时的 `item_search_result.xml` 里并没有 `@+id/tv_duration`
-    - 解决：补充 @+id/tv_duration
+    - 现象：在搜索页点击右下角 AI 按钮，本来应该进 AI 搜索页，但实际却“返回主页”
+    - 原因：导航图没有ai搜索相关的信息，
+           getResourceId(...) 找不到 ID，返回 0 → 走到了
+           else { navController.navigateUp() }，等价于从搜索页“后退一页”，就回到主页
+    - 解决：导航图补上从搜索页到 AI 搜索页的 action，声明 AI 搜索入口页和结果页的目的地 + 参数
 
 - [ ] 优化ai搜索页面UI，使用流传输ai对话与历史记录
     - 2025-11-29 - done by KJH

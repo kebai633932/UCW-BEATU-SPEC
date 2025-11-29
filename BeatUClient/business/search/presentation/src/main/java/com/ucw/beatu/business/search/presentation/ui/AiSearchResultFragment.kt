@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.TextView
+import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -35,6 +36,13 @@ class AiSearchResultFragment : Fragment(R.layout.fragment_ai_search_result) {
         chatRecyclerView.layoutManager = LinearLayoutManager(requireContext())
         chatRecyclerView.adapter = adapter
 
+        // 如果从 AiSearchFragment 带了首个提问过来，这里直接渲染成首轮对话
+        val initialQuery = arguments?.getString(ARG_AI_QUERY).orEmpty()
+        if (initialQuery.isNotBlank()) {
+            adapter.addMessage(AiChatMessage.User(initialQuery))
+            simulateAiReply(initialQuery)
+        }
+
         followUpInput = view.findViewById(R.id.et_ai_follow_up)
         followUpButton = view.findViewById(R.id.btn_ai_follow_up)
         followUpButton.setOnClickListener {
@@ -51,6 +59,10 @@ class AiSearchResultFragment : Fragment(R.layout.fragment_ai_search_result) {
         val reply = "AI 回复: $userMessage"
         adapter.addMessage(AiChatMessage.Ai(reply))
         chatRecyclerView.scrollToPosition(adapter.itemCount - 1)
+    }
+
+    companion object {
+        const val ARG_AI_QUERY = "ai_query"
     }
 }
 sealed class AiChatMessage {
