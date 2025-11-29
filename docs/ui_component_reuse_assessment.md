@@ -341,7 +341,7 @@
 - **状态管理**：使用 `StateFlow` 或 `LiveData` 管理组件状态（如点赞/未点赞）
 - **动画效果**：使用 `ObjectAnimator` 或 `ValueAnimator` 实现统一的动画效果
 - **无障碍支持**：确保所有组件支持 `contentDescription` 和键盘导航
-- **性能优化**：避免过度绘制，使用 `ViewStub` 延迟加载非关键 UI
+- **性能优化**：避免过度绘制，使用 `ViewStub` 延迟加载非关键 UIa
 
 ---
 
@@ -368,4 +368,7 @@
 - 架构文档：`docs/architecture.md`
 - 开发计划：`docs/development_plan.md`
 - 需求文档：`BeatUClient/docs/requirements.md`
+
+
+
 

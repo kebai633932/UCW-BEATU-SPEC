@@ -6,7 +6,6 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
@@ -24,6 +23,7 @@ import com.ucw.beatu.business.videofeed.presentation.viewmodel.VideoItemViewMode
 import com.ucw.beatu.shared.common.navigation.LandscapeLaunchContract
 import com.ucw.beatu.shared.common.navigation.NavigationHelper
 import com.ucw.beatu.shared.common.navigation.NavigationIds
+import com.ucw.beatu.shared.designsystem.widget.VideoControlsView
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -46,7 +46,7 @@ class VideoItemFragment : Fragment() {
     private val viewModel: VideoItemViewModel by viewModels()
 
     private var playerView: PlayerView? = null
-    private var playButton: View? = null
+    private var controlsView: VideoControlsView? = null
     private var videoItem: VideoItem? = null
     private var navigatingToLandscape = false
     private var hasPreparedPlayer = false
@@ -73,12 +73,21 @@ class VideoItemFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         playerView = view.findViewById(R.id.player_view)
-        playButton = view.findViewById(R.id.iv_play_button)
-        val fullScreenButton = view.findViewById<View>(R.id.iv_fullscreen)
+        controlsView = view.findViewById(R.id.video_controls)
+        // 注意：全屏按钮及标题/频道名称等现在定义在 shared:designsystem 的 VideoControlsView 布局中
+        val sharedControlsRoot = controlsView
+        val fullScreenButton = sharedControlsRoot?.findViewById<View>(
+            com.ucw.beatu.shared.designsystem.R.id.iv_fullscreen
+        )
 
         videoItem?.let { item ->
-            view.findViewById<android.widget.TextView>(R.id.tv_video_title)?.text = item.title
-            view.findViewById<android.widget.TextView>(R.id.tv_channel_name)?.text = item.authorName
+            // 通过 VideoControlsView 内部的 TextView 展示标题与频道名称
+            sharedControlsRoot?.findViewById<android.widget.TextView>(
+                com.ucw.beatu.shared.designsystem.R.id.tv_video_title
+            )?.text = item.title
+            sharedControlsRoot?.findViewById<android.widget.TextView>(
+                com.ucw.beatu.shared.designsystem.R.id.tv_channel_name
+            )?.text = item.authorName
             
             // 初始化互动状态
             viewModel.initInteractionState(
@@ -89,17 +98,42 @@ class VideoItemFragment : Fragment() {
             )
 
             val isLandscapeVideo = item.orientation == VideoOrientation.LANDSCAPE
-            fullScreenButton.visibility = if (isLandscapeVideo) View.VISIBLE else View.GONE
+            fullScreenButton?.visibility = if (isLandscapeVideo) View.VISIBLE else View.GONE
         }
 
         observeViewModel()
 
-        playButton?.setOnClickListener { viewModel.togglePlayPause() }
-        view.findViewById<View>(R.id.iv_like)?.setOnClickListener { viewModel.toggleLike() }
-        view.findViewById<View>(R.id.iv_favorite)?.setOnClickListener { viewModel.toggleFavorite() }
-        view.findViewById<View>(R.id.iv_comment)?.setOnClickListener { /* TODO: 打开评论弹层 */ }
-        view.findViewById<View>(R.id.iv_share)?.setOnClickListener { /* TODO: 打开分享弹层 */ }
-        fullScreenButton.setOnClickListener { openLandscapeMode() }
+        controlsView?.listener = object : VideoControlsView.VideoControlsListener {
+            override fun onPlayPauseClicked() {
+                viewModel.togglePlayPause()
+            }
+
+            override fun onLikeClicked() {
+                viewModel.toggleLike()
+            }
+
+            override fun onFavoriteClicked() {
+                viewModel.toggleFavorite()
+            }
+
+            override fun onCommentClicked() {
+                // TODO: 打开评论弹层
+            }
+
+            override fun onShareClicked() {
+                // TODO: 打开分享弹层
+            }
+
+            override fun onSeekRequested(positionMs: Long) {
+                viewModel.seekTo(positionMs)
+            }
+        }
+        fullScreenButton?.setOnClickListener { openLandscapeMode() }
+
+        // A：点视频 = 播放/暂停切换，暂停时进度条 + 时间由 VideoControlsView 根据 state 自动显示
+        playerView?.setOnClickListener {
+            viewModel.togglePlayPause()
+        }
 
     }
 
@@ -108,19 +142,17 @@ class VideoItemFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
                     playerView?.visibility = View.VISIBLE
-                    playButton?.visibility = if (state.isPlaying) View.GONE else View.VISIBLE
-                    
-                    // 更新互动状态UI
-                    view?.findViewById<android.widget.TextView>(R.id.tv_like_count)?.text = state.likeCount.toString()
-                    view?.findViewById<android.widget.TextView>(R.id.tv_favorite_count)?.text = state.favoriteCount.toString()
-                    
-                    // 更新点赞/收藏图标状态（TODO: 需要根据实际布局调整）
-                    // view.findViewById<ImageView>(R.id.iv_like)?.setImageResource(
-                    //     if (state.isLiked) R.drawable.ic_like_filled else R.drawable.ic_like_outline
-                    // )
-                    // view.findViewById<ImageView>(R.id.iv_favorite)?.setImageResource(
-                    //     if (state.isFavorited) R.drawable.ic_favorite_filled else R.drawable.ic_favorite_outline
-                    // )
+
+                    controlsView?.state = VideoControlsView.VideoControlsState(
+                        isPlaying = state.isPlaying,
+                        isLoading = state.isLoading,
+                        currentPositionMs = state.currentPositionMs,
+                        durationMs = state.durationMs,
+                        isLiked = state.isLiked,
+                        isFavorited = state.isFavorited,
+                        likeCount = state.likeCount,
+                        favoriteCount = state.favoriteCount
+                    )
                     
                     state.error?.let { error -> Log.e(TAG, "播放错误: $error") }
                 }
@@ -170,7 +202,7 @@ class VideoItemFragment : Fragment() {
             Log.d(TAG, "onDestroyView: skip release because navigatingToLandscape=true")
         }
         playerView = null
-        playButton = null
+        controlsView = null
     }
 
     fun onParentVisibilityChanged(isVisible: Boolean) {
