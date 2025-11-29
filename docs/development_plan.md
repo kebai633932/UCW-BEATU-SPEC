@@ -521,10 +521,23 @@
     2. `NavigationHelper.navigateByStringId` 恢复 Bundle 支持，Search/AiSearch 直接通过 helper 携参跳转，避免“点击即退出”的回退逻辑。
     3. 修复 `SearchFragment` 输入崩溃（先初始化适配器再添加 TextWatcher，并在 `updateSearchSuggestions` 中校验 adapter 初始化状态）。
     4. 所有 Search 相关布局启用 `android:fitsSystemWindows="true"`，确保头部不与状态栏重叠。
+  - 实现细节：
+    - **SearchFragment**：搜索入口页面，包含搜索框、搜索历史（FlowLayout）、热门搜索（FlowLayout）、搜索建议列表（RecyclerView），右下角 AI 搜索按钮。支持实时搜索建议更新，点击建议项跳转到搜索结果页。
+    - **SearchResultFragment**：常规搜索结果页面，显示视频列表（网格布局，RecyclerView + GridLayoutManager），支持重新搜索。复用统一的搜索头部布局。
+    - **AiSearchFragment**：AI 搜索入口页面，包含输入框和发送按钮，支持接收初始提问参数（通过 Navigation Arguments）。点击发送按钮跳转到 AI 搜索结果页。
+    - **AiSearchResultFragment**：AI 搜索结果页面，显示对话列表（RecyclerView），支持多轮对话，底部输入框可继续提问。接收初始 AI 查询参数并显示为第一条用户消息，随后显示模拟的 AI 回复。
+    - **统一头部布局**：`view_search_header.xml` 包含返回按钮、搜索输入框、清除按钮、搜索按钮，所有搜索相关页面复用此布局。
+    - **导航路由**：
+      - `action_feed_to_search`：Feed → Search（300ms iOS 风格滑动动画）
+      - `action_search_to_searchResult`：Search → SearchResult（传递 `search_query` 参数）
+      - `action_search_to_aiSearch`：Search → AiSearch（传递可选的 `ai_query` 参数）
+      - `action_aiSearch_to_aiSearchResult`：AiSearch → AiSearchResult（传递 `ai_query` 参数）
   - 当前进展：
     - ✅ 统一头部布局 + 交互；
     - ✅ 搜索按钮跳转逻辑恢复；
-    - ✅ 状态栏遮挡问题解决。
+    - ✅ 状态栏遮挡问题解决；
+    - ✅ 四个搜索相关页面 UI 完成；
+    - ✅ 导航路由配置完成。
   - 下一步：接入真实搜索/AI 数据、补全过滤/推荐策略，并将实现结果回填 `docs/api_reference.md` 与交互文档。
 
 - [x] 修复搜索框不能输入文本的bug
@@ -548,13 +561,31 @@
            else { navController.navigateUp() }，等价于从搜索页“后退一页”，就回到主页
     - 解决：导航图补上从搜索页到 AI 搜索页的 action，声明 AI 搜索入口页和结果页的目的地 + 参数
 
-- [ ] 优化ai搜索页面UI，使用流传输ai对话与历史记录
+- [x] 个人主页的视频流点击视频首页进入对应视频列表的视频观看
     - 2025-11-29 - done by KJH
     - 成果：
+      - 个人主页下的各个视频列表用真实数据，如果没有则显示 暂无视频
+      - 点击视频首页跳转，用视频播放器来播放视频
+      - 视频播放器来播放视频，使用视频复用池
+      - 视频播放器播放视频，(默认)竖屏播放,右上角有个返回按钮，返回主页
+      - 视频播放器播放视频，播放对应视频列表的视频，有上限与下限，不能越过
+    - 实现细节：
+      - **UserWorksViewerFragment**：竖屏视频列表观看页面，使用 `ViewPager2` 垂直滑动，复用 `VideoItemFragment` 进行视频播放。支持定位到初始视频（通过 `initial_video_id` 参数），限制在用户视频列表范围内，不能越界。右上角返回按钮，返回个人主页。
+      - **UserWorksViewerViewModel**：管理用户作品视频列表加载，从 `UserWorksRepository` 获取数据并转换为 `VideoItem`，供 `VideoItemFragment` 使用。支持播放器生命周期管理（通过 `VideoPlayerPool`）。
+      - **UserWorksViewerAdapter**：`FragmentStateAdapter` 实现，复用 `VideoItemFragment` 进行视频播放。与 `VideoFeedAdapter` 结构一致，确保播放器复用池正常工作。
+      - **导航路由**：
+        - `action_userProfile_to_userWorksViewer`：UserProfile → UserWorksViewer（传递 `user_id` 和 `initial_video_id` 参数，300ms iOS 风格滑动动画）
+      - **数据流**：
+        - `UserProfileFragment` 点击视频 → 调用 `navigateToUserWorksViewer(work)` → 传递 `user_id`、`initial_video_id`、`videoList` → `UserWorksViewerFragment` 接收参数 → `UserWorksViewerViewModel` 加载视频列表 → `ViewPager2` 显示视频 → `VideoItemFragment` 播放视频（复用播放器池）
+      - **播放器复用**：通过 `VideoItemViewModel` 自动使用 `VideoPlayerPool`，确保播放器实例复用，避免内存泄漏。
+      - **生命周期管理**：正确处理播放/暂停，`onPageSelected` 时播放，`onPageRelease` 时暂停，`onDestroyView` 时释放播放器资源。
 
-- [ ] 个人主页的视频流点击视频首页进入对应视频列表的视频观看
-    - 2025-11-29 - 
+
+- [ ] 优化ai搜索页面UI，使用流传输ai对话与历史记录
+    - 2025-11- - done by KJH
     - 成果：
+
+
 
 - [ ] 视频播放的暂停，进度条，主页的按钮交互
     - 
