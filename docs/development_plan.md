@@ -342,9 +342,6 @@
         1. `SearchFragment` 返回按钮统一调用 `action_search_to_feed`，必要时兜底 `popBackStack`/`onBackPressedDispatcher`，保证任何入口都能回到 Feed。
         2. 搜索页→主页切换稳定，未再出现停留/退出，交互体验一致。
 
-- [ ] 点击对应的视频首页，跳转到对应的视频主页
-    - 2025-
-    - 成果：
 
 - [ ] 尝试寻找视频流与个人主页的滑动显示
     - 2025-11-25 - done by
@@ -515,6 +512,29 @@
     - 减少客户端/服务端沟通成本，所有材料集中可查。
   - 下一步：后端部署完成后更新 `NetworkModule.BASE_URL` 并回填联调记录。
 
+
+- [ ] 搜索/AI 搜索多页面 UI 设计与实现  
+  - 2025-11-28 - done by KJH
+  - 需求：补齐搜索体系的 4 个核心页面 —— 搜索首页、AI 搜索首页、常规搜索结果页、AI 搜索结果页，保证切面与 Feed、导航一致，并解决搜索输入导致崩溃/退出的问题。  
+  - 方案：
+    1. 在 `business/search/presentation` 中抽取统一的 `view_search_header.xml`，并在 Search/SearchResult/AiSearch/AiSearchResult 四个 Fragment 中 include，同步复用返回/搜索/清除按钮逻辑。
+    2. `NavigationHelper.navigateByStringId` 恢复 Bundle 支持，Search/AiSearch 直接通过 helper 携参跳转，避免“点击即退出”的回退逻辑。
+    3. 修复 `SearchFragment` 输入崩溃（先初始化适配器再添加 TextWatcher，并在 `updateSearchSuggestions` 中校验 adapter 初始化状态）。
+    4. 所有 Search 相关布局启用 `android:fitsSystemWindows="true"`，确保头部不与状态栏重叠。
+  - 当前进展：
+    - ✅ 统一头部布局 + 交互；
+    - ✅ 搜索按钮跳转逻辑恢复；
+    - 搜索输入崩溃问题解决；
+    - ✅ 状态栏遮挡问题解决。
+  - 下一步：接入真实搜索/AI 数据、补全过滤/推荐策略，并将实现结果回填 `docs/api_reference.md` 与交互文档。
+
+- [ ] 个人主页的视频流点击视频首页进入对应视频列表的视频观看
+    - 2025-11-28 - done by KJH
+    - 成果：
+
+- [ ] 视频播放的暂停，进度条，主页的按钮交互
+    - 
+    - 成果：
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 
 

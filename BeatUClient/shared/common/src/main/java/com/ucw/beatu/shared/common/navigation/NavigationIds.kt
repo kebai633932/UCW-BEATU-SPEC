@@ -9,6 +9,9 @@ object NavigationIds {
     const val FEED = "feed"
     const val USER_PROFILE = "userProfile"
     const val SEARCH = "search"
+    const val SEARCH_RESULT = "searchResult"
+    const val AI_SEARCH = "aiSearch"
+    const val AI_SEARCH_RESULT = "aiSearchResult"
     const val SETTINGS = "settings"
     const val LANDSCAPE = "landscape"
     
@@ -19,6 +22,9 @@ object NavigationIds {
     const val ACTION_FEED_TO_LANDSCAPE = "action_feed_to_landscape"
     const val ACTION_USER_PROFILE_TO_FEED = "action_userProfile_to_feed"
     const val ACTION_SEARCH_TO_FEED = "action_search_to_feed"
+    const val ACTION_SEARCH_TO_SEARCH_RESULT = "action_search_to_searchResult"
+    const val ACTION_SEARCH_TO_AI_SEARCH = "action_search_to_aiSearch"
+    const val ACTION_AI_SEARCH_TO_AI_SEARCH_RESULT = "action_aiSearch_to_aiSearchResult"
     const val ACTION_SETTINGS_TO_FEED = "action_settings_to_feed"
     const val ACTION_LANDSCAPE_TO_FEED = "action_landscape_to_feed"
 }

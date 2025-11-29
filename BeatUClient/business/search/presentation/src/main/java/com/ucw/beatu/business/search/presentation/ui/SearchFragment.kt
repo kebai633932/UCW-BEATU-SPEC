@@ -8,12 +8,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
-import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
-import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.ucw.beatu.business.search.presentation.R
@@ -29,23 +28,20 @@ class SearchFragment : Fragment() {
 
     private lateinit var searchEditText: EditText
     private lateinit var clearButton: View
-    private lateinit var cancelButton: TextView
+    private lateinit var searchButton: TextView
+    private lateinit var backButton: View
     private lateinit var scrollBeforeSearch: View
     private lateinit var llSearchHistory: FlowLayout
     private lateinit var llHotSearch: FlowLayout
     private lateinit var rvSearchSuggestions: RecyclerView
-    private lateinit var rvSearchResults: RecyclerView
-    private lateinit var emptyState: View
+    private lateinit var aiButton: View
     
     private lateinit var searchSuggestionAdapter: SearchSuggestionAdapter
-    private lateinit var searchResultAdapter: SearchResultGridAdapter
 
     // 搜索状态
     private enum class SearchState {
         BEFORE_SEARCH,      // 搜索前（显示历史和热门）
-        TYPING,             // 输入中（显示搜索建议）
-        SEARCHING,          // 搜索中
-        SEARCH_RESULT       // 搜索结果
+        TYPING              // 输入中（显示搜索建议）
     }
     
     private var currentState = SearchState.BEFORE_SEARCH
@@ -62,11 +58,12 @@ class SearchFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         initViews(view)
+        // 先初始化列表和适配器，再绑定 TextWatcher，避免 NPE
+        initSearchSuggestions()
         initSearchBox(view)
         initSearchHistory()
         initHotSearch()
-        initSearchSuggestions()
-        initSearchResults()
+        aiButton.setOnClickListener { navigateToAiSearch() }
     }
 
     /**
@@ -75,13 +72,13 @@ class SearchFragment : Fragment() {
     private fun initViews(view: View) {
         searchEditText = view.findViewById(R.id.et_search)
         clearButton = view.findViewById(R.id.btn_clear)
-        cancelButton = view.findViewById(R.id.tv_cancel)
-        scrollBeforeSearch = view.findViewById(R.id.scroll_before_search)
+        backButton = view.findViewById(R.id.btn_back)
+        searchButton = view.findViewById(R.id.tv_search)
         llSearchHistory = view.findViewById(R.id.ll_search_history)
         llHotSearch = view.findViewById(R.id.ll_hot_search)
         rvSearchSuggestions = view.findViewById(R.id.rv_search_suggestions)
-        rvSearchResults = view.findViewById(R.id.rv_search_results)
-        emptyState = view.findViewById(R.id.empty_state)
+        aiButton = view.findViewById(R.id.btn_ai)
+        clearButton.isVisible = searchEditText.text?.isNotEmpty() == true
     }
 
     /**
@@ -94,13 +91,12 @@ class SearchFragment : Fragment() {
             
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val query = s.toString()
-                clearButton.visibility = if (query.isEmpty()) View.GONE else View.VISIBLE
+                clearButton.isVisible = query.isNotEmpty()
                 
                 if (query.isEmpty()) {
                     switchToState(SearchState.BEFORE_SEARCH)
                 } else {
                     switchToState(SearchState.TYPING)
-                    // TODO: 实时搜索建议
                     updateSearchSuggestions(query)
                 }
             }
@@ -111,18 +107,11 @@ class SearchFragment : Fragment() {
         // 清除按钮点击
         clearButton.setOnClickListener {
             searchEditText.text?.clear()
-            clearButton.visibility = View.GONE
             switchToState(SearchState.BEFORE_SEARCH)
         }
-        
-        // 取消按钮点击
-        cancelButton.setOnClickListener {
-            searchEditText.text?.clear()
-            // 使用 Navigation 返回上一页
-            if (!findNavController().popBackStack()) {
-                // 如果无法返回，则使用 onBackPressedDispatcher
-                requireActivity().onBackPressedDispatcher.onBackPressed()
-            }
+        // 搜索按钮点击
+        searchButton.setOnClickListener {
+            performSearch(searchEditText.text.toString())
         }
         
         // 搜索框回车键监听
@@ -136,8 +125,11 @@ class SearchFragment : Fragment() {
         }
         
         // 返回按钮点击
-        view.findViewById<View>(R.id.btn_back)?.setOnClickListener {
-            navigateBackToFeed()
+        backButton.setOnClickListener {
+            searchEditText.text?.clear()
+            if (!findNavController().popBackStack()) {
+                requireActivity().onBackPressedDispatcher.onBackPressed()
+            }
         }
     }
 
@@ -217,23 +209,10 @@ class SearchFragment : Fragment() {
     }
 
     /**
-     * 初始化搜索结果
-     */
-    private fun initSearchResults() {
-        val spanCount = 2
-        val layoutManager = GridLayoutManager(context, spanCount)
-        rvSearchResults.layoutManager = layoutManager
-        
-        searchResultAdapter = SearchResultGridAdapter(emptyList()) { item ->
-            // TODO: 跳转到视频详情
-        }
-        rvSearchResults.adapter = searchResultAdapter
-    }
-
-    /**
      * 更新搜索建议
      */
     private fun updateSearchSuggestions(query: String) {
+        if (!::searchSuggestionAdapter.isInitialized) return
         val suggestions = getMockSearchSuggestions(query)
         searchSuggestionAdapter.updateSuggestions(suggestions)
     }
@@ -250,21 +229,38 @@ class SearchFragment : Fragment() {
         val imm = activity?.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
         imm?.hideSoftInputFromWindow(searchEditText.windowToken, 0)
         
-        switchToState(SearchState.SEARCHING)
-        
-        // TODO: 调用 ViewModel 或 Repository 执行搜索
-        // 模拟搜索延迟
-        searchEditText.postDelayed({
-            val results = getMockSearchResults()
-            if (results.isEmpty()) {
-                switchToState(SearchState.SEARCH_RESULT)
-                emptyState.visibility = View.VISIBLE
-            } else {
-                searchResultAdapter.updateResults(results)
-                switchToState(SearchState.SEARCH_RESULT)
-                emptyState.visibility = View.GONE
-            }
-        }, 500)
+        navigateToSearchResult(query)
+    }
+
+    /**
+     * 导航到常规搜索结果
+     */
+    private fun navigateToSearchResult(query: String) {
+        runCatching {
+                NavigationHelper.navigateByStringId(
+                    findNavController(),
+                    NavigationIds.ACTION_SEARCH_TO_SEARCH_RESULT,
+                    requireContext()
+                )
+        }.onFailure {
+            findNavController().navigateUp()
+        }
+    }
+
+    /**
+     * 跳转至 AI 搜索或带初始提问
+     */
+    private fun navigateToAiSearch(initialPrompt: String? = null) {
+        val args = initialPrompt?.let { bundleOf("ai_query" to it) }
+        runCatching {
+            NavigationHelper.navigateByStringId(
+                findNavController(),
+                NavigationIds.ACTION_SEARCH_TO_AI_SEARCH,
+                requireContext()
+            )
+        }.onFailure {
+            findNavController().navigateUp()
+        }
     }
 
     /**
@@ -273,31 +269,8 @@ class SearchFragment : Fragment() {
     private fun switchToState(state: SearchState) {
         currentState = state
         
-        when (state) {
-            SearchState.BEFORE_SEARCH -> {
-                scrollBeforeSearch.visibility = View.VISIBLE
-                rvSearchSuggestions.visibility = View.GONE
-                rvSearchResults.visibility = View.GONE
-                emptyState.visibility = View.GONE
-            }
-            SearchState.TYPING -> {
-                scrollBeforeSearch.visibility = View.GONE
-                rvSearchSuggestions.visibility = View.VISIBLE
-                rvSearchResults.visibility = View.GONE
-                emptyState.visibility = View.GONE
-            }
-            SearchState.SEARCHING -> {
-                scrollBeforeSearch.visibility = View.GONE
-                rvSearchSuggestions.visibility = View.GONE
-                rvSearchResults.visibility = View.GONE
-                emptyState.visibility = View.GONE
-            }
-            SearchState.SEARCH_RESULT -> {
-                scrollBeforeSearch.visibility = View.GONE
-                rvSearchSuggestions.visibility = View.GONE
-                rvSearchResults.visibility = View.VISIBLE
-            }
-        }
+        scrollBeforeSearch.isVisible = state == SearchState.BEFORE_SEARCH
+        rvSearchSuggestions.isVisible = state == SearchState.TYPING
     }
 
     /**
@@ -319,26 +292,6 @@ class SearchFragment : Fragment() {
             "$query 搞笑"
         )
     }
-
-    private fun getMockSearchResults(): List<SearchResultItem> {
-        return listOf(
-            SearchResultItem("视频1", "00:30", "https://example.com/thumb1.jpg"),
-            SearchResultItem("视频2", "01:20", "https://example.com/thumb2.jpg"),
-            SearchResultItem("视频3", "00:45", "https://example.com/thumb3.jpg"),
-            SearchResultItem("视频4", "02:10", "https://example.com/thumb4.jpg"),
-            SearchResultItem("视频5", "00:55", "https://example.com/thumb5.jpg"),
-            SearchResultItem("视频6", "01:30", "https://example.com/thumb6.jpg"),
-        )
-    }
-
-    /**
-     * 搜索结果数据模型
-     */
-    data class SearchResultItem(
-        val title: String,
-        val duration: String,
-        val thumbnailUrl: String
-    )
 
     /**
      * 搜索建议适配器
@@ -372,45 +325,6 @@ class SearchFragment : Fragment() {
                 tvSuggestion.text = suggestion
                 itemView.setOnClickListener {
                     onSuggestionClick(suggestion)
-                }
-            }
-        }
-    }
-
-    /**
-     * 搜索结果网格适配器
-     */
-    private class SearchResultGridAdapter(
-        private var results: List<SearchResultItem>,
-        private val onItemClick: (SearchResultItem) -> Unit
-    ) : RecyclerView.Adapter<SearchResultGridAdapter.ResultViewHolder>() {
-
-        fun updateResults(newResults: List<SearchResultItem>) {
-            results = newResults
-            notifyDataSetChanged()
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ResultViewHolder {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_search_result_grid, parent, false)
-            return ResultViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: ResultViewHolder, position: Int) {
-            holder.bind(results[position])
-        }
-
-        override fun getItemCount(): Int = results.size
-
-        inner class ResultViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-            private val ivThumbnail: ImageView = itemView.findViewById(R.id.iv_thumbnail)
-            private val tvDuration: TextView = itemView.findViewById(R.id.tv_duration)
-            
-            fun bind(item: SearchResultItem) {
-                tvDuration.text = item.duration
-                // TODO: 加载缩略图
-                itemView.setOnClickListener {
-                    onItemClick(item)
                 }
             }
         }
