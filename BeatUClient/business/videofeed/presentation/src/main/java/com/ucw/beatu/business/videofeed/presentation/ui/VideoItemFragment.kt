@@ -94,6 +94,11 @@ class VideoItemFragment : Fragment() {
 
         observeViewModel()
 
+        // 单击播放区域：切换播放/暂停
+        playerView?.setOnClickListener {
+            viewModel.togglePlayPause()
+        }
+
         playButton?.setOnClickListener { viewModel.togglePlayPause() }
         view.findViewById<View>(R.id.iv_like)?.setOnClickListener { viewModel.toggleLike() }
         view.findViewById<View>(R.id.iv_favorite)?.setOnClickListener { viewModel.toggleFavorite() }
