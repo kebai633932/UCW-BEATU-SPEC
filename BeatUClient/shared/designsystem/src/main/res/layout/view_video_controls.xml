@@ -186,7 +186,8 @@
                         android:textColor="#FFFFFFFF" />
                 </LinearLayout>
 
-                <!-- 右侧：互动按钮 -->
+                <!-- 右侧：互动按钮（按“点赞 → 分享 → 收藏 → 评论”顺序展示，均为图标 + 数字） -->
+
                 <!-- 点赞 -->
                 <LinearLayout
                     android:layout_width="wrap_content"
@@ -214,7 +215,34 @@
                         android:textColor="#FFFFFFFF" />
                 </LinearLayout>
 
-                <!-- 收藏 -->
+                <!-- 分享 -->
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:layout_marginEnd="16dp">
+
+                    <ImageView
+                        android:id="@+id/iv_share"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_interaction_share"
+                        android:tint="#FFFFFFFF"
+                        android:contentDescription="分享"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <TextView
+                        android:id="@+id/tv_share_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="12sp"
+                        android:textColor="#FFFFFFFF" />
+                </LinearLayout>
+
+                <!-- 收藏（爱心） -->
                 <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -242,27 +270,30 @@
                 </LinearLayout>
 
                 <!-- 评论 -->
-                <ImageView
-                    android:id="@+id/iv_comment"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/selector_comment"
-                    android:tint="#FFFFFFFF"
-                    android:contentDescription="评论"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:layout_marginEnd="16dp" />
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
 
-                <!-- 分享 -->
-                <ImageView
-                    android:id="@+id/iv_share"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/selector_share"
-                    android:tint="#FFFFFFFF"
-                    android:contentDescription="分享"
-                    android:clickable="true"
-                    android:focusable="true" />
+                    <ImageView
+                        android:id="@+id/iv_comment"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/selector_comment"
+                        android:tint="#FFFFFFFF"
+                        android:contentDescription="评论"
+                        android:clickable="true"
+                        android:focusable="true" />
+
+                    <TextView
+                        android:id="@+id/tv_comment_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0"
+                        android:textSize="12sp"
+                        android:textColor="#FFFFFFFF" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

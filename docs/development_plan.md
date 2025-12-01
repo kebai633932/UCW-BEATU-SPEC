@@ -576,45 +576,33 @@
 - [x] 个人主页的视频流点击视频首页进入对应视频列表的视频观看
     - 2025-11-29 - done by KJH
     - 成果：
-      - 个人主页下的各个视频列表用真实数据，如果没有则显示 暂无视频
-      - 点击视频首页跳转，用视频播放器来播放视频
-      - 视频播放器来播放视频，使用视频复用池
-      - 视频播放器播放视频，(默认)竖屏播放,右上角有个返回按钮，返回主页
-      - 视频播放器播放视频，播放对应视频列表的视频，有上限与下限，不能越过
-    - 实现细节：
-      - `UserProfileFragment`：监听 `RecyclerView` item 点击，将当前用户 ID、作品列表（转换为 `VideoItem`）和起始 index 打包，通过 `NavigationIds.ACTION_USER_PROFILE_TO_USER_WORKS_VIEWER` 携参跳转。若列表为空则提示“暂无视频”并阻止导航，避免空指针。
-      - `UserWorksAdapter`：抽象 `UserWorkUiModel(playUrl/title/playCount)` 并暴露 `onVideoClick`，实现 item 级回调，点击即可触发上述导航。
-      - `UserWorksViewerFragment`：新增竖屏 `ViewPager2`（overScroll disabled、offscreenPageLimit=1），内部直接复用 `VideoItemFragment` 实例；顶部 `MaterialToolbar` 提供返回按钮，调用 `popBackStack()` 保证主页不重建。
-      - `UserWorksViewerViewModel`：使用 `StateFlow` 保存 `userId`、`videoList`、`currentIndex`，恢复/初始化后仅在第一次注入数据时构建列表，并在页面切换时记录 index 以便文档统计。
-      - `UserWorksViewerAdapter`：`FragmentStateAdapter` 封装 `VideoItem` 列表的增量更新，`createFragment` 统一走 `VideoItemFragment.newInstance`，确保播放器复用池/互动逻辑零改动。
-      - 播放器生命周期：参照 `RecommendFragment` 的 `handlePageSelected`，对子 Fragment 执行 `checkVisibilityAndPlay()` / `onParentVisibilityChanged(false)`，保证任何时刻只有一个视频占用播放器。
-      - 边界回弹：`ViewPager2` 内部 `RecyclerView` 自定义 `EdgeEffectFactory`，上/下越界时会以 Overshoot 动画把容器拉回原位并做触觉反馈，模拟抖音“第一条/最后一条不可继续滑动，只回弹提示”的体验。
-      - 导航：`NavigationIds` 新增 `USER_WORKS_VIEWER`、`ACTION_USER_PROFILE_TO_USER_WORKS_VIEWER`，`main_nav_graph.xml` 新建目的地 + action，并定义 `user_id`、`initial_index` 参数。
-    - 验证 & 指标：
-      - ViewPager2 边界控制：上下滑 50 次均被 `OnPageChangeCallback` 校验，`currentItem` 始终落在 `[0, videoList.lastIndex]`，无越界闪屏。
-      - 播放器复用：日志统计 `VideoPlayerPool.acquire/release`，整个链路仅保留 2 个实例（当前 + 预加载），与主 Feed 一致，未观察到额外实例泄漏。
-      - 返回体验：`popBackStack()` 返回后 `UserProfileFragment` 的 `RecyclerView` 位置保持不变，手动复验 10 次无重建日志。
-    - 待完善：与数据层的交互未完善，用户数据未取出，视频数据还是数据库全部视频
 
-- [x] 个人主页添加返回按钮
-    - 2025-12-01 - done by KJH
-    - 内容：
-        - 在 `fragment_user_profile.xml` 顶部新增 `MaterialToolbar`，统一展示用户主页标题并提供导航返回图标。
-        - `UserProfileFragment` 中通过 `toolbar.setNavigationOnClickListener` 接入返回逻辑：优先调用 `findNavController().popBackStack()` 回退到上一个页面，兜底走 `requireActivity().onBackPressedDispatcher.onBackPressed()`，保证稳定返回上一级。
-        - 与「个人主页作品播放页」顶部返回按钮风格保持一致，避免出现“主页可以返回，但作品播放页不行”或反向不一致的体验。
+- [ ] 个人主页的视频流点击视频首页进入对应视频列表的视频观看
+    - 2025-11-29 - 
+    - 成果：
 
-- [x] 优化ai搜索页面UI，去除独立结果页
-    - 2025-12-02 - done by KJH
-    - 内容：
-        - `AiSearchFragment` 直接承担输入、历史对话与结果展示，移除 `AiSearchResultFragment`，所有操作都在同一页面完成，减少跳转延迟。
-        - 对话 UI 统一为“AI 在左、用户在右”的气泡布局（蓝 / 深灰），`RecyclerView + LinearLayoutManager(stackFromEnd)` 保证任何时候滚动到底部可见最新消息。
-        - 模拟流式输出：AI 固定回复“暂不支持该功能，后续对接后端接口”，字符按约 28 ms 间隔逐字输出，由 `AiChatAdapter.updateAiMessage` 增量刷新；真实流式接口后续可直接替换数据源。
-
-- [ ] 主页的按钮交互 (评论，收藏，转发，点赞)
+- [ ] 视频播放的暂停，进度条，主页的按钮交互
     - 
     - 成果：
+        1. 竖屏 Feed 的 `VideoControlsView` 完成三层结构重构：顶部集数/标题（绿色层）、中间进度条（红色层）、底部作者头像+互动按钮（蓝色层），保证进度条与作者头像对齐且位置稳定不跳动。
+        2. 实现点击视频区域 = 播放/暂停切换，暂停时自动显示中间层进度条，播放时隐藏进度条但保留整行“隐藏手势区”，不影响其占位。
+        3. 支持在进度条所在行按住左右滑动进行“相对位移”Seek：以当前播放时间为基准前后微调，滑动过程中自动只保留红色层，绿色/蓝色层通过透明度隐藏但继续占位，松手后立即恢复。
+        4. 优化拖动体验：无论是直接拖动进度条还是在隐藏区滑动，进度条 UI 会即时跟随且松手后根据播放状态“秒级”显示/隐藏，去除因状态刷新导致的可见延迟。
+
+- [x] 推荐页底部交互按钮图标统一为线性风格
+    - 2025-11-29 - done by LRZ
+    - 成果：
+        1. 将竖屏推荐页底部 `VideoControlsView` 中的互动按钮组调整为“点赞（拇指）→ 分享（箭头）→ 收藏（爱心）→ 评论（气泡）”顺序，统一使用线性白色图标。
+        2. 为评论与分享按钮补充计数文案展示，使四个按钮均为“图标 + 数字”竖排布局，视觉与交互风格与需求截图对齐。
+        3. 在 `shared/designsystem` 模块内新增通用交互图标 drawable，便于后续在横屏、个人主页等场景复用。
+
+- [x] 推荐页图文+BGM 内容接入  
+    - 2025-12-01 - done by LRZ  
+    - 内容：在 `videofeed` 模块中扩展 `VideoItem` 支持 `FeedContentType.IMAGE_POST`，新增图文专用 `ImagePostFragment` 与 `fragment_image_post.xml`，在推荐页首条硬编码插入一条“图文+音乐”内容，用 `ViewPager2` 承载多图轮播、`VideoItemViewModel.prepareAudioOnly` 播放 BGM，并复用视频底部作者/点赞/评论/收藏/分享交互区；首屏加载时自动触发当前页播放/轮播，确保推荐页初始就能正常展示图文卡片体验。
+
 
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 
 
+ 
