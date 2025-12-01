@@ -585,6 +585,13 @@
     - 待完善：与数据层的交互未完善，用户数据未取出，视频数据还是数据库全部视频
 
 
+- [x] 个人主页添加返回按钮
+    - 2025-12-01 - done by KJH
+    - 内容：
+        - 在 `fragment_user_profile.xml` 顶部新增 `MaterialToolbar`，统一展示用户主页标题并提供导航返回图标。
+        - `UserProfileFragment` 中通过 `toolbar.setNavigationOnClickListener` 接入返回逻辑：优先调用 `findNavController().popBackStack()` 回退到上一个页面，兜底走 `requireActivity().onBackPressedDispatcher.onBackPressed()`，保证稳定返回上一级。
+        - 与「个人主页作品播放页」顶部返回按钮风格保持一致，避免出现“主页可以返回，但作品播放页不行”或反向不一致的体验。
+
 - [ ] 优化ai搜索页面UI，使用流传输ai对话与历史记录
     - 2025-11- - done by KJH
     - 成果：

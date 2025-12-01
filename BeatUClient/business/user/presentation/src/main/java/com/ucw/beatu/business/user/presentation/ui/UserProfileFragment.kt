@@ -27,6 +27,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.navigation.fragment.findNavController
+import com.google.android.material.appbar.MaterialToolbar
 import com.ucw.beatu.business.user.domain.model.User
 import com.ucw.beatu.business.user.domain.model.UserWork
 import com.ucw.beatu.business.user.presentation.R
@@ -60,6 +61,7 @@ class UserProfileFragment : Fragment() {
     private lateinit var tvLikesCount: TextView
     private lateinit var tvFollowingCount: TextView
     private lateinit var tvFollowersCount: TextView
+    private lateinit var toolbar: MaterialToolbar
     private lateinit var rvWorks: RecyclerView
     
     // 头像上传相关
@@ -146,6 +148,7 @@ class UserProfileFragment : Fragment() {
      * 初始化 UI 元素
      */
     private fun initViews(view: View) {
+        toolbar = view.findViewById(R.id.toolbar_user_profile)
         ivAvatar = view.findViewById(R.id.iv_avatar)
         tvUsername = view.findViewById(R.id.tv_username)
         tvBio = view.findViewById(R.id.tv_bio)
@@ -153,6 +156,15 @@ class UserProfileFragment : Fragment() {
         tvFollowingCount = view.findViewById(R.id.tv_following_count)
         tvFollowersCount = view.findViewById(R.id.tv_followers_count)
         rvWorks = view.findViewById(R.id.rv_works)
+
+        toolbar.setNavigationOnClickListener {
+            // 优先走导航栈返回，兜底走 Activity 的 onBackPressedDispatcher
+            val navController = runCatching { findNavController() }.getOrNull()
+            if (navController != null && navController.popBackStack()) {
+                return@setNavigationOnClickListener
+            }
+            requireActivity().onBackPressedDispatcher.onBackPressed()
+        }
     }
 
     /**

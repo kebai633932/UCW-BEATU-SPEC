@@ -173,7 +173,7 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer) {
         }
 
         private fun handlePull(deltaDistance: Float) {
-            val sign = if (direction == DIRECTION_TOP) 1 else -1
+            val sign = if (direction == RecyclerView.EdgeEffectFactory.DIRECTION_TOP) 1 else -1
             val drag = sign * viewPager.height * deltaDistance * 0.6f
             val newTranslation = (viewPager.translationY + drag)
             val clamped = newTranslation.coerceIn(-maxTranslationPx, maxTranslationPx)
