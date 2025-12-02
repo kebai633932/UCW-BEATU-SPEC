@@ -11,24 +11,19 @@ import kotlinx.coroutines.flow.Flow
 interface VideoDao {
     @Query("SELECT * FROM videos ORDER BY viewCount DESC LIMIT :limit")
     fun observeTopVideos(limit: Int): Flow<List<VideoEntity>>
-
-    @Query("SELECT * FROM videos WHERE authorName = :authorName ORDER BY viewCount DESC LIMIT :limit")
-    fun observeVideosByAuthorName(authorName: String, limit: Int): Flow<List<VideoEntity>>
-    //todo   使用   user_video_relations  表
-    @Query("SELECT * FROM videos WHERE isFavorited = 1 ORDER BY viewCount DESC LIMIT :limit")
-    fun observeFavoritedVideos(limit: Int): Flow<List<VideoEntity>>
-    //todo   使用   user_video_relations  表
-    @Query("SELECT * FROM videos WHERE isLiked = 1 ORDER BY viewCount DESC LIMIT :limit")
-    fun observeLikedVideos(limit: Int): Flow<List<VideoEntity>>
-
+    //todo 后续结合表修改
     @Query("""
-        SELECT v.* FROM videos v
-        INNER JOIN interaction_state i ON v.id = i.videoId
-        WHERE i.lastSeekMs > 0
-        ORDER BY i.lastSeekMs DESC
-        LIMIT :limit
+    SELECT * FROM videos
+    WHERE authorName = :authorName
+    ORDER BY viewCount DESC
+    LIMIT :limit
     """)
-//todo     改用 user_video_relations   表
+    fun observeVideosByAuthorName(authorName: String, limit: Int): Flow<List<VideoEntity>>
+    @Query("SELECT * FROM videos ORDER BY viewCount DESC LIMIT :limit")
+    fun observeFavoritedVideos(limit: Int): Flow<List<VideoEntity>>
+    @Query("SELECT * FROM videos ORDER BY viewCount DESC LIMIT :limit")
+    fun observeLikedVideos(limit: Int): Flow<List<VideoEntity>>
+    @Query("SELECT * FROM videos ORDER BY viewCount DESC LIMIT :limit")
     fun observeHistoryVideos(limit: Int): Flow<List<VideoEntity>>
 
     @Query("SELECT * FROM videos WHERE id = :id LIMIT 1")

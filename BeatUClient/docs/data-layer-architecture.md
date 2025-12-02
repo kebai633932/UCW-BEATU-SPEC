@@ -27,12 +27,20 @@ Repository (仓储层) - 统一数据访问接口
 - `BeatUDatabase`: Room数据库主类
 - `VideoDao`: 视频数据访问对象
 - `CommentDao`: 评论数据访问对象
-- `InteractionStateDao`: 交互状态数据访问对象
+- `UserDao`: 用户数据访问对象
+- `UserVideoRelationDao`: 用户-作品关系 DAO
+- `UserFollowDao`: 用户关注关系 DAO（本地缓存后端 `beatu_user_follows`）
+- `UserInteractionDao`: 用户互动 DAO（本地缓存后端 `beatu_interactions`）
+- `WatchHistoryDao`: 观看历史 DAO（本地缓存后端 `beatu_watch_history`）
 
 **实体类**:
 - `VideoEntity`: 视频实体
 - `CommentEntity`: 评论实体
-- `InteractionStateEntity`: 交互状态实体
+- `UserEntity`: 用户实体
+- `UserVideoRelationEntity`: 用户-作品关系实体
+- `UserFollowEntity`: 用户关注关系实体
+- `UserInteractionEntity`: 用户互动实体（点赞/收藏/关注作者）
+- `WatchHistoryEntity`: 观看历史聚合实体
 
 **使用示例**:
 ```kotlin

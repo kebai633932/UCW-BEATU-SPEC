@@ -187,9 +187,6 @@ class VideoRepositoryImpl @Inject constructor(
                 favoriteCount = mock.favoriteCount.toLong(),
                 shareCount = mock.shareCount.toLong(),
                 viewCount = 0L,
-                isLiked = false,
-                isFavorited = false,
-                isFollowedAuthor = false,
                 createdAt = null,
                 updatedAt = null
             )
