@@ -724,6 +724,9 @@
         - `business/user/domain/mock/MockUserCatalog`：从 `MockVideoCatalog.getPage(preferredOrientation=null, page=1, pageSize=50)` 中提取唯一作者名，生成若干 `User(id="mock_author_xxx", name=作者名, bio=说明文案, 统计数据为模拟值)`，再追加一个 `current_user` 对应的当前用户配置。
         - `BeatUApp`（`@HiltAndroidApp`）：在 `onCreate` 中注入 `UserRepository`，通过协程后台检查 `DEFAULT_USER_ID` 是否已存在，如不存在则调用 `MockUserCatalog.buildMockUsers(currentUserId = DEFAULT_USER_ID)` 批量 `saveUser` 落库，只在首次安装/首次运行时执行一次，后续直接从本地数据库加载用户信息。
 
+- [x] 完善数据库表
+    - 2025-12-02 - done by KJH
+
 - [x] 初步完善个人主页视频的视频数据显示
     - 2025-12-02 - done by KJH
     - 内容：

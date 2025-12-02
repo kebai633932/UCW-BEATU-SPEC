@@ -138,7 +138,7 @@ Repository协调两个数据源：
         └─→ 获取最新数据并更新缓存
 ```
 
-### 使用示例
+### 使用示例：首页视频流「本地/Mock 先展示，远端异步刷新」
 
 ```kotlin
 @Inject lateinit var videoRepository: VideoRepository
@@ -149,15 +149,17 @@ viewModelScope.launch {
         .collect { result ->
             when (result) {
                 is AppResult.Loading -> {
-                    // 显示加载状态
+                    // 显示加载状态（首帧 shimmer 等）
                 }
                 is AppResult.Success -> {
-                    // 显示视频列表
+                    // 首先可能是本地缓存 / Mock，稍后会被远端最新数据刷新
                     val videos = result.data
+                    // 渲染视频列表
                 }
                 is AppResult.Error -> {
-                    // 显示错误信息
+                    // 所有兜底方案都失败时才会走到这里
                     val error = result.throwable
+                    // 显示错误信息 / 空态
                 }
             }
         }
