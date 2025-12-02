@@ -12,6 +12,9 @@ interface InteractionStateDao {
     @Query("SELECT * FROM interaction_state WHERE videoId = :videoId")
     fun observe(videoId: String): Flow<InteractionStateEntity?>
 
+    @Query("SELECT videoId FROM interaction_state WHERE lastSeekMs > 0 ORDER BY lastSeekMs DESC LIMIT :limit")
+    fun observePlayedVideoIds(limit: Int): Flow<List<String>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(state: InteractionStateEntity)
 }

@@ -69,6 +69,31 @@ class UserProfileViewModel @Inject constructor(
     }
 
     /**
+     * 切换不同的标签页数据源
+     */
+    fun switchTab(tabType: TabType, userId: String, limit: Int = UserWorksRepository.DEFAULT_LIMIT) {
+        observeWorksJob?.cancel()
+        observeWorksJob = viewModelScope.launch {
+            val flow = when (tabType) {
+                TabType.WORKS -> userWorksRepository.observeUserWorks(userId, limit)
+                TabType.COLLECTIONS -> userWorksRepository.observeFavoritedWorks(limit)
+                TabType.LIKES -> userWorksRepository.observeLikedWorks(limit)
+                TabType.HISTORY -> userWorksRepository.observeHistoryWorks(limit)
+            }
+            flow.collect { works ->
+                _userWorks.value = works
+            }
+        }
+    }
+
+    enum class TabType {
+        WORKS,      // 作品
+        COLLECTIONS, // 收藏
+        LIKES,      // 点赞
+        HISTORY     // 历史
+    }
+
+    /**
      * 更新用户头像
      */
     fun updateAvatar(userId: String, avatarPath: String) {
