@@ -644,10 +644,11 @@
         - 后台协程按需逐条补齐首帧，本地 Room 通过 Flow 更新后，使用 `coverUrl` 的列表会自动刷新为真实封面，兼顾首屏性能与视觉效果。
 
 - [x] 新增用户的mock数据
-    - 2025-12-01 - done by KJH
-    - 方案：仿造MockVideoCatalog，VideoRepositoryImpl.buildMockVideos() 会把
-    - 这些 url 映射到领域层 Video.playUrl，最终变成播放器使用的播放地址
+    - 2025-12-02 - done by KJH
+    - 方案：仿造 `MockVideoCatalog` 的思路，在用户领域层新增 `MockUserCatalog`，基于视频 Mock 目录中的作者名称生成一批演示用户，并把“当前用户”也包含在内，统一通过本地 `UserRepository` 写入 Room；加载时机放到应用启动（`BeatUApp.onCreate`），而不是等打开个人主页时再懒加载。
     - 内容：
+        - `business/user/domain/mock/MockUserCatalog`：从 `MockVideoCatalog.getPage(preferredOrientation=null, page=1, pageSize=50)` 中提取唯一作者名，生成若干 `User(id="mock_author_xxx", name=作者名, bio=说明文案, 统计数据为模拟值)`，再追加一个 `current_user` 对应的当前用户配置。
+        - `BeatUApp`（`@HiltAndroidApp`）：在 `onCreate` 中注入 `UserRepository`，通过协程后台检查 `DEFAULT_USER_ID` 是否已存在，如不存在则调用 `MockUserCatalog.buildMockUsers(currentUserId = DEFAULT_USER_ID)` 批量 `saveUser` 落库，只在首次安装/首次运行时执行一次，后续直接从本地数据库加载用户信息。
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 

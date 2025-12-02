@@ -6,6 +6,7 @@ import com.ucw.beatu.business.user.domain.model.User
 import com.ucw.beatu.business.user.domain.model.UserWork
 import com.ucw.beatu.business.user.domain.repository.UserRepository
 import com.ucw.beatu.business.user.domain.repository.UserWorksRepository
+import com.ucw.beatu.shared.common.mock.MockUserCatalog
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -111,20 +112,22 @@ class UserProfileViewModel @Inject constructor(
      */
     fun initMockData(userId: String) {
         viewModelScope.launch {
-            // 检查用户是否已存在
+            // 如果当前用户不存在，则插入一批基于 MockVideoCatalog 的演示用户（包含当前用户）
             val existingUser = userRepository.getUserById(userId)
             if (existingUser == null) {
-                // 创建假用户数据
-                val mockUser = User(
-                    id = userId,
-                    avatarUrl = null,
-                    name = "测试用户",
-                    bio = "这是一句话介绍一下自己",
-                    likesCount = 56000,
-                    followingCount = 128,
-                    followersCount = 12000
-                )
-                userRepository.saveUser(mockUser)
+                val mockUsers = MockUserCatalog.buildMockUsers(currentUserId = userId)
+                mockUsers.forEach { mockUser ->
+                    val domainUser = User(
+                        id = mockUser.id,
+                        avatarUrl = mockUser.avatarUrl,
+                        name = mockUser.name,
+                        bio = mockUser.bio,
+                        likesCount = mockUser.likesCount,
+                        followingCount = mockUser.followingCount,
+                        followersCount = mockUser.followersCount
+                    )
+                    userRepository.saveUser(domainUser)
+                }
             }
         }
     }
