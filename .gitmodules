@@ -1,0 +1,3 @@
+[submodule "AgentMCP"]
+	path = AgentMCP
+	url = https://github.com/Tom6255/AgentMCP.git
