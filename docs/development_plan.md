@@ -448,7 +448,7 @@
   - 量化指标：弱网/断网场景下推荐页可播放率从 0% → 100%；首次降级加载耗时 < 150 ms（Mock 列表内存生成）
 
 - [x] 视频流网络请求优化：弱网环境下流畅滑动保障
-  - 2025-12-XX - done by AI
+  - 2025-12-XX - done by LRZ
   - 需求：视频数据拉取后端数据失败时会卡顿十多秒，导致界面无法操作，即使在弱网环境下也需要保证用户可以流畅上下滑动视频流页面。
   - 方案：
     1. **ViewModel层优化**：
@@ -794,7 +794,7 @@
         - 
 
 - [x] 文档整体对齐当前实现（客户端 + 后端）
-    - 2025-12-03 - done by GPT-5.1 Codex
+    - 2025-12-03 - done by LRZ
     - 内容：
         1. 更新根目录 `README.md` 的顶层仓库结构说明，将原先的逻辑服务目录（BeatUAIService / BeatUContentService / BeatUGateway / BeatUObservability）调整为实际存在的 `BeatUClient` 与 `BeatUBackend`，并明确说明后端采用 FastAPI 单体承载上述服务职责。
         2. 在 `docs/architecture.md` 中补充说明：当前物理实现为 `BeatUBackend` 工程，内部按 Gateway / ContentService / AIService / Observability 职责划分路由与 Service 层，保持与 `docs/backend/*` 的契约一致。
