@@ -7,6 +7,7 @@ import com.ucw.beatu.business.videofeed.domain.model.Video
 import com.ucw.beatu.business.videofeed.domain.repository.VideoRepository
 import com.ucw.beatu.shared.common.mock.MockVideoCatalog
 import com.ucw.beatu.shared.common.result.AppResult
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 /**
@@ -34,19 +36,40 @@ class VideoRepositoryImpl @Inject constructor(
 
         coroutineScope {
             // 并行：本地 & 远端
+            // 优化：优先从本地缓存读取，支持离线滑动
             val localDeferred = async {
-                if (page == 1 && orientation == null) {
-                    localDataSource.observeVideos(limit).firstOrNull() ?: emptyList()
+                if (orientation == null) {
+                    // 读取足够多的缓存数据，支持多页滑动
+                    val cacheLimit = limit * maxOf(page, 3) // 至少缓存3页数据
+                    localDataSource.observeVideos(cacheLimit).firstOrNull()?.let { cachedVideos ->
+                        // 从缓存中提取对应页的数据
+                        val startIndex = (page - 1) * limit
+                        val endIndex = startIndex + limit
+                        if (startIndex < cachedVideos.size) {
+                            cachedVideos.subList(startIndex, minOf(endIndex, cachedVideos.size))
+                        } else {
+                            // 如果缓存数据不足，返回空列表，等待远程数据或mock数据
+                            emptyList()
+                        }
+                    } ?: emptyList()
                 } else {
                     emptyList()
                 }
             }
 
+            // 远程请求添加超时控制（3秒），快速失败，避免长时间卡顿
+            // 弱网环境下，3秒足够判断网络是否可用，快速fallback到本地缓存或mock数据
             val remoteDeferred = async {
                 try {
-                    remoteDataSource.getVideoFeed(page, limit, orientation)
+                    // 使用较短的超时时间（3秒），快速失败并fallback到本地缓存或mock数据
+                    withTimeout(3000L) {
+                        remoteDataSource.getVideoFeed(page, limit, orientation)
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    // 超时立即返回错误，不等待15秒，确保UI流畅
+                    AppResult.Error(e)
                 } catch (e: Exception) {
-                    AppResult.Error(e)   // ✅ 这里用 AppResult.Error(e)
+                    AppResult.Error(e)
                 }
             }
 
@@ -55,31 +78,54 @@ class VideoRepositoryImpl @Inject constructor(
                 emit(AppResult.Success(localVideos)) // 先显示本地缓存
             }
 
-            when (val remoteResult = remoteDeferred.await()) {
+            // 尝试获取远程数据，如果失败则快速fallback到mock数据
+            val remoteResult = try {
+                remoteDeferred.await()
+            } catch (e: Exception) {
+                AppResult.Error(e)
+            }
+
+            when (remoteResult) {
                 is AppResult.Success -> {
-                    if (page == 1 && orientation == null) {
+                    // 保存所有页面的数据到本地缓存，支持离线滑动
+                    if (orientation == null) {
                         localDataSource.saveVideos(remoteResult.data)
                     }
                     emit(remoteResult) // 用远程最新数据刷新
                 }
                 is AppResult.Error -> {
+                    // 远程失败时，优先使用本地缓存，如果没有则使用mock数据
                     if (localVideos.isEmpty()) {
                         val fallbackVideos = buildMockVideos(page, limit, orientation)
                         if (fallbackVideos.isNotEmpty()) {
-                            if (page == 1 && orientation == null) {
+                            // 保存mock数据到本地缓存，支持后续离线使用
+                            if (orientation == null) {
                                 localDataSource.saveVideos(fallbackVideos)
                             }
                             emit(AppResult.Success(fallbackVideos))
                         } else {
+                            // 如果mock数据也没有，才发送错误
                             emit(remoteResult)
                         }
+                    } else {
+                        // 本地已有数据时，静默失败，不发送错误，保持UI流畅
+                        // 使用本地缓存数据，确保用户可以继续滑动
+                        emit(AppResult.Success(localVideos))
                     }
-                    // 本地已有数据时，静默失败
                 }
                 is AppResult.Loading -> emit(remoteResult)
             }
         }
-    }.catch { emit(AppResult.Error(it)) }
+    }.catch { 
+        // 捕获所有异常，确保不会导致Flow崩溃
+        // 如果本地和mock都没有数据，才发送错误
+        val fallbackVideos = buildMockVideos(1, 20, null)
+        if (fallbackVideos.isNotEmpty()) {
+            emit(AppResult.Success(fallbackVideos))
+        } else {
+            emit(AppResult.Error(it))
+        }
+    }
 
 
     override suspend fun getVideoDetail(videoId: String): AppResult<Video> {

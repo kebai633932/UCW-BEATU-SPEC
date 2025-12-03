@@ -18,7 +18,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import javax.inject.Inject
 
 data class RecommendUiState(
@@ -48,22 +50,27 @@ class RecommendViewModel @Inject constructor(
     private var currentVideoId: String? = null
     private var currentPage = 1
     private val pageSize = 20
+    private var isLoadingMore = false // 防止重复加载更多
+    private var loadMoreJob: Job? = null // 加载更多的Job，用于取消
     
     init {
-        // 初始化时加载视频列表
+        // 初始化时立即加载视频列表（会先显示本地缓存，然后后台更新）
         loadVideoList()
     }
 
     /**
      * 加载视频列表（使用GetFeedUseCase）
+     * 优化：立即显示本地缓存，不等待网络请求，确保UI流畅
      */
     private fun loadVideoList() {
         viewModelScope.launch {
             currentPage = 1
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            // 不立即设置isLoading，让本地缓存先显示
+            _uiState.value = _uiState.value.copy(error = null)
             
             getFeedUseCase(currentPage, pageSize)
                 .catch { e ->
+                    // 即使出错，也保持当前显示的数据（可能是本地缓存或mock数据）
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = e.message ?: "加载失败"
@@ -72,16 +79,16 @@ class RecommendViewModel @Inject constructor(
                 .collect { result ->
                     when (result) {
                         is AppResult.Loading -> {
-                            _uiState.value = _uiState.value.copy(isLoading = true)
+                            // 只有在没有数据时才显示loading，避免闪烁
+                            if (_uiState.value.videoList.isEmpty()) {
+                                _uiState.value = _uiState.value.copy(isLoading = true)
+                            }
                         }
                         is AppResult.Success -> {
                             val videos = result.data.map { it.toVideoItem() }
                             // 如果第一页数量不足 pageSize，可以直接认为后端数据已经加载完
                             val hasLoadedAll = videos.size < pageSize
                             android.util.Log.d("RecommendViewModel", "loadVideoList: Success, loaded ${videos.size} videos")
-                            videos.forEachIndexed { index, video ->
-                                android.util.Log.d("RecommendViewModel", "Video[$index]: id=${video.id}, url=${video.videoUrl}, title=${video.title}")
-                            }
                             _uiState.value = _uiState.value.copy(
                                 videoList = videos,
                                 isLoading = false,
@@ -91,9 +98,13 @@ class RecommendViewModel @Inject constructor(
                         }
                         is AppResult.Error -> {
                             android.util.Log.e("RecommendViewModel", "loadVideoList: Error - ${result.message ?: result.throwable?.message}", result.throwable)
+                            // 即使出错，也保持当前显示的数据，不阻塞UI
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
-                                error = result.message ?: result.throwable?.message ?: "加载失败"
+                                // 静默失败，不显示错误，因为已经有本地缓存或mock数据
+                                error = if (_uiState.value.videoList.isEmpty()) {
+                                    result.message ?: result.throwable?.message ?: "加载失败"
+                                } else null
                             )
                         }
                     }
@@ -144,26 +155,34 @@ class RecommendViewModel @Inject constructor(
 
     /**
      * 加载更多视频（上拉加载）
+     * 优化：异步加载，不阻塞UI滑动，即使失败也不影响用户体验
      */
     fun loadMoreVideos() {
-        viewModelScope.launch {
-            // 避免重复加载；如果已经确认后端没有更多数据，则直接走前端“无限循环”逻辑，不再请求
-            if (_uiState.value.isLoading || _uiState.value.hasLoadedAllFromBackend) return@launch
+        // 避免重复加载；如果已经确认后端没有更多数据，则直接走前端"无限循环"逻辑，不再请求
+        if (isLoadingMore || _uiState.value.hasLoadedAllFromBackend) {
+            return
+        }
+        
+        // 取消之前的加载任务，避免重复请求
+        loadMoreJob?.cancel()
+        
+        isLoadingMore = true
+        loadMoreJob = viewModelScope.launch {
+            val nextPage = currentPage + 1
             
-            currentPage++
-            getFeedUseCase(currentPage, pageSize)
+            getFeedUseCase(nextPage, pageSize)
                 .catch { e ->
-                    currentPage-- // 回退页码
-                    _uiState.value = _uiState.value.copy(
-                        error = e.message ?: "加载更多失败"
-                    )
+                    // 加载失败时，静默失败，不影响用户滑动
+                    isLoadingMore = false
+                    android.util.Log.w("RecommendViewModel", "loadMoreVideos: Error - ${e.message}", e)
                 }
                 .collect { result ->
                     when (result) {
                         is AppResult.Loading -> {
-                            // 加载更多时不显示全局loading
+                            // 加载更多时不显示全局loading，保持UI流畅
                         }
                         is AppResult.Success -> {
+                            isLoadingMore = false
                             val moreVideos = result.data.map { it.toVideoItem() }
                             val currentList = _uiState.value.videoList.toMutableList()
 
@@ -176,6 +195,7 @@ class RecommendViewModel @Inject constructor(
                                 )
                                 return@collect
                             } else {
+                                currentPage = nextPage // 更新页码
                                 currentList.addAll(moreVideos)
                                 val hasLoadedAll = moreVideos.size < pageSize
                                 _uiState.value = _uiState.value.copy(
@@ -186,10 +206,12 @@ class RecommendViewModel @Inject constructor(
                             }
                         }
                         is AppResult.Error -> {
-                            currentPage-- // 回退页码
-                            _uiState.value = _uiState.value.copy(
-                                error = result.message ?: result.throwable.message ?: "加载更多失败"
-                            )
+                            isLoadingMore = false
+                            // 静默失败，不显示错误，不影响用户滑动
+                            // 如果后端数据已加载完，标记为已加载完，启用无限循环
+                            android.util.Log.w("RecommendViewModel", "loadMoreVideos: Error - ${result.message ?: result.throwable?.message}", result.throwable)
+                            // 如果连续失败多次，可以考虑标记为已加载完，启用无限循环
+                            // 这里暂时不处理，让用户继续尝试
                         }
                     }
                 }

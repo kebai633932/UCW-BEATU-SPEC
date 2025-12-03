@@ -75,7 +75,9 @@ class RecommendFragment : Fragment() {
             vp.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
                     super.onPageSelected(position)
-                    if (position >= (adapter?.itemCount ?: 0) - 2) {
+                    val totalCount = adapter?.itemCount ?: 0
+                    // 预加载机制：提前2页开始加载，确保用户滑动流畅
+                    if (position >= totalCount - 2) {
                         viewModel.loadMoreVideos()
                     }
                     // 通知当前选中的 Fragment 播放，其他暂停
