@@ -43,33 +43,65 @@ class UserProfileViewModel @Inject constructor(
     private var observeFollowStatusJob: Job? = null
 
     /**
-     * 加载用户信息（使用用户名）
+     * 加载用户信息（使用用户名或用户ID）
+     * 如果 userName 是 "current_user"，则通过用户ID查询；否则通过用户名查询
      */
     fun loadUser(userName: String) {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                // 先尝试从本地获取
-                val localUser = userRepository.getUserByName(userName)
-                if (localUser != null) {
-                    _user.value = localUser
-                    _isLoading.value = false
-                }
+                // 如果 userName 是 "current_user"，则通过用户ID查询
+                val isUserId = userName == "current_user"
                 
-                // 然后观察用户信息变化（使用 StateFlow 自动更新）
-                // 如果本地没有，会尝试从远程获取
-                userRepository.observeUserByName(userName).collect { user ->
-                    _user.value = user
-                    if (user != null) {
+                if (isUserId) {
+                    // 通过用户ID查询
+                    android.util.Log.d("UserProfileViewModel", "Loading user by ID: $userName")
+                    val localUser = userRepository.getUserById(userName)
+                    if (localUser != null) {
+                        _user.value = localUser
                         _isLoading.value = false
-                    } else {
-                        // 如果本地和远程都没有，尝试从远程获取
-                        val remoteResult = userRepository.fetchUserFromRemoteByName(userName)
-                        if (remoteResult is com.ucw.beatu.shared.common.result.AppResult.Success) {
-                            _user.value = remoteResult.data
+                    }
+                    
+                    // 观察用户信息变化（使用 StateFlow 自动更新）
+                    userRepository.observeUserById(userName).collect { user ->
+                        _user.value = user
+                        if (user != null) {
                             _isLoading.value = false
                         } else {
+                            // 如果本地和远程都没有，尝试从远程获取
+                            val remoteResult = userRepository.fetchUserFromRemote(userName)
+                            if (remoteResult is com.ucw.beatu.shared.common.result.AppResult.Success) {
+                                _user.value = remoteResult.data
+                                _isLoading.value = false
+                            } else {
+                                _isLoading.value = false
+                            }
+                        }
+                    }
+                } else {
+                    // 通过用户名查询
+                    android.util.Log.d("UserProfileViewModel", "Loading user by name: $userName")
+                    val localUser = userRepository.getUserByName(userName)
+                    if (localUser != null) {
+                        _user.value = localUser
+                        _isLoading.value = false
+                    }
+                    
+                    // 然后观察用户信息变化（使用 StateFlow 自动更新）
+                    // 如果本地没有，会尝试从远程获取
+                    userRepository.observeUserByName(userName).collect { user ->
+                        _user.value = user
+                        if (user != null) {
                             _isLoading.value = false
+                        } else {
+                            // 如果本地和远程都没有，尝试从远程获取
+                            val remoteResult = userRepository.fetchUserFromRemoteByName(userName)
+                            if (remoteResult is com.ucw.beatu.shared.common.result.AppResult.Success) {
+                                _user.value = remoteResult.data
+                                _isLoading.value = false
+                            } else {
+                                _isLoading.value = false
+                            }
                         }
                     }
                 }

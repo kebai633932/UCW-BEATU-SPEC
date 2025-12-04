@@ -67,12 +67,11 @@ class UserProfileFragment : Fragment() {
     // 头像上传相关
     private var currentAvatarFile: File? = null
     private val pickImageLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.data?.let { uri ->
-                handleImageSelection(uri)
-            }
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { handleImageSelection(it) } ?: run {
+            Log.w(TAG, "Image selection cancelled or failed")
+            Toast.makeText(requireContext(), "未选择图片", Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -147,12 +146,18 @@ class UserProfileFragment : Fragment() {
         // 观察 ViewModel 数据
         observeViewModel()
 
-        // 初始化并加载用户数据（使用用户名）
+        // 初始化并加载用户数据（使用用户名或用户ID）
         Log.d(TAG, "Loading user with userName: $userName")
         viewModel.loadUser(userName)
-        // 默认加载"作品"标签的数据（使用authorName查询）
-        // 对于收藏、点赞、历史记录，需要等待用户加载完成后获取用户ID
-        viewModel.switchTab(UserProfileViewModel.TabType.WORKS, authorName = userName, currentUserId = "current_user")
+        // 默认加载"作品"标签的数据
+        // 如果 userName 是 "current_user"，需要等待用户加载完成后获取实际用户名
+        // 否则直接使用 userName 作为 authorName
+        if (userName == "current_user") {
+            // 等待用户加载完成后再加载作品
+            // 作品加载会在 observeViewModel 中的用户加载完成后触发
+        } else {
+            viewModel.switchTab(UserProfileViewModel.TabType.WORKS, authorName = userName, currentUserId = "current_user")
+        }
         
         // 只读模式下，开始观察关注同步结果
         if (isReadOnly) {
@@ -187,14 +192,13 @@ class UserProfileFragment : Fragment() {
 
         // 只读模式下隐藏返回按钮
         if (isReadOnly) {
-            // 完全移除返回键，包括其占用的空间
-            toolbar.navigationIcon = null
-            toolbar.title = null
-            // 移除 navigationIcon 的 content inset，避免占用空间
-            toolbar.setContentInsetsAbsolute(0, 0)
-            toolbar.contentInsetStartWithNavigation = 0
+            // 完全隐藏 toolbar，避免占用空间
+            toolbar.visibility = View.GONE
             // 设置背景为黑色，以便在Dialog中正常显示
             view.setBackgroundColor(android.graphics.Color.BLACK)
+            // 移除 fitsSystemWindows，避免系统窗口间距
+            val rootLayout = view.findViewById<androidx.constraintlayout.widget.ConstraintLayout>(com.ucw.beatu.business.user.presentation.R.id.root_layout)
+            rootLayout?.fitsSystemWindows = false
         } else {
             toolbar.setNavigationOnClickListener {
                 // 优先走导航栈返回，兜底走 Activity 的 onBackPressedDispatcher
@@ -294,7 +298,9 @@ class UserProfileFragment : Fragment() {
                             latestUser = user
                             updateUserInfo(user)
                             // 用户加载完成后，更新标签数据
-                            viewModel.switchTab(UserProfileViewModel.TabType.WORKS, authorName = userName, currentUserId = user.id)
+                            // 使用用户的实际名称作为 authorName（因为作品是通过 authorName 查询的）
+                            val authorName = if (userName == "current_user") user.name else userName
+                            viewModel.switchTab(UserProfileViewModel.TabType.WORKS, authorName = authorName, currentUserId = user.id)
                             // 开始观察关注状态（只读模式）
                             if (isReadOnly) {
                                 val currentUserId = "current_user" // TODO: 从用户会话获取当前用户ID
@@ -509,7 +515,13 @@ class UserProfileFragment : Fragment() {
         // 切换 ViewModel 的数据源
         // authorName用于作品查询，currentUserId用于收藏、点赞、历史记录查询
         val currentUserId = latestUser?.id ?: "current_user"
-        viewModel.switchTab(tabType, authorName = userName, currentUserId = currentUserId)
+        // 如果 userName 是 "current_user"，使用用户的实际名称作为 authorName
+        val authorName = if (userName == "current_user" && latestUser != null) {
+            latestUser!!.name
+        } else {
+            userName
+        }
+        viewModel.switchTab(tabType, authorName = authorName, currentUserId = currentUserId)
     }
     
     /**
@@ -561,9 +573,12 @@ class UserProfileFragment : Fragment() {
      * 打开图片选择器
      */
     private fun openImagePicker() {
-        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-        intent.type = "image/*"
-        pickImageLauncher.launch(intent)
+        try {
+            pickImageLauncher.launch("image/*")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open image picker", e)
+            Toast.makeText(requireContext(), "无法打开图片选择器: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     /**
@@ -571,25 +586,54 @@ class UserProfileFragment : Fragment() {
      */
     private fun handleImageSelection(uri: Uri) {
         try {
+            Log.d(TAG, "Handling image selection: $uri")
+            
+            // 检查用户ID是否存在
+            val currentUserId = latestUser?.id
+            if (currentUserId == null) {
+                Log.e(TAG, "Cannot update avatar: currentUserId is null")
+                Toast.makeText(requireContext(), "无法更新头像：用户信息未加载", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
             // 读取图片
             val inputStream = requireContext().contentResolver.openInputStream(uri)
+                ?: run {
+                    Log.e(TAG, "Failed to open input stream for URI: $uri")
+                    Toast.makeText(requireContext(), "无法读取图片", Toast.LENGTH_SHORT).show()
+                    return
+                }
+            
             val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
-
+            inputStream.close()
+            
+            if (bitmap == null) {
+                Log.e(TAG, "Failed to decode bitmap from URI: $uri")
+                Toast.makeText(requireContext(), "无法解析图片", Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            Log.d(TAG, "Bitmap decoded successfully: ${bitmap.width}x${bitmap.height}")
+            
             // 保存到本地文件
             val avatarFile = saveAvatarToLocal(bitmap)
             if (avatarFile != null) {
+                Log.d(TAG, "Avatar saved to: ${avatarFile.absolutePath}")
+                
                 // 更新数据库
-                val currentUserId = latestUser?.id
-                if (currentUserId != null) {
-                    viewModel.updateAvatar(currentUserId, avatarFile.absolutePath)
-                }
+                viewModel.updateAvatar(currentUserId, avatarFile.absolutePath)
                 
                 // 更新 UI
                 ivAvatar.setImageBitmap(bitmap)
+                
+                Toast.makeText(requireContext(), "头像更新成功", Toast.LENGTH_SHORT).show()
+            } else {
+                Log.e(TAG, "Failed to save avatar to local file")
+                Toast.makeText(requireContext(), "保存头像失败", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Error handling image selection", e)
+            Toast.makeText(requireContext(), "处理图片失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -601,7 +645,8 @@ class UserProfileFragment : Fragment() {
             // 创建头像目录
             val avatarDir = File(requireContext().filesDir, "avatars")
             if (!avatarDir.exists()) {
-                avatarDir.mkdirs()
+                val created = avatarDir.mkdirs()
+                Log.d(TAG, "Created avatar directory: $created, path: ${avatarDir.absolutePath}")
             }
 
             // 创建头像文件
@@ -609,14 +654,28 @@ class UserProfileFragment : Fragment() {
             val avatarFile = File(avatarDir, "avatar_${currentUserId}.jpg")
             
             // 压缩并保存
-            val outputStream = FileOutputStream(avatarFile)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
-            outputStream.flush()
-            outputStream.close()
-
+            FileOutputStream(avatarFile).use { outputStream ->
+                val compressed = bitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
+                if (!compressed) {
+                    Log.e(TAG, "Failed to compress bitmap")
+                    return null
+                }
+                outputStream.flush()
+            }
+            
+            // 验证文件是否创建成功
+            if (!avatarFile.exists() || avatarFile.length() == 0L) {
+                Log.e(TAG, "Avatar file not created or empty: ${avatarFile.absolutePath}")
+                return null
+            }
+            
+            Log.d(TAG, "Avatar file saved successfully: ${avatarFile.absolutePath}, size: ${avatarFile.length()} bytes")
             avatarFile
         } catch (e: IOException) {
-            e.printStackTrace()
+            Log.e(TAG, "IOException while saving avatar", e)
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error while saving avatar", e)
             null
         }
     }

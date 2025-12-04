@@ -107,11 +107,9 @@ class VideoRepositoryImpl @Inject constructor(
             when (remoteResult) {
                 is AppResult.Success -> {
                     // 保存所有页面的数据到本地缓存，支持离线滑动
-                    if (orientation != null) {
-                        localDataSource.saveVideos(remoteResult.data)
-                        // 异步为没有封面的视频生成缩略图
-                        localDataSource.enqueueThumbnailGeneration(remoteResult.data)
-                    }
+                    localDataSource.saveVideos(remoteResult.data)
+                    // 异步为没有封面的视频生成缩略图
+                    localDataSource.enqueueThumbnailGeneration(remoteResult.data)
                     emit(remoteResult) // 用远程最新数据刷新
                 }
                 is AppResult.Error -> {
@@ -120,11 +118,9 @@ class VideoRepositoryImpl @Inject constructor(
                         val fallbackVideos = buildMockVideos(page, limit, orientation)
                         if (fallbackVideos.isNotEmpty()) {
                             // 保存mock数据到本地缓存，支持后续离线使用
-                            if (orientation != null) {
-                                localDataSource.saveVideos(fallbackVideos)
-                                // 异步为没有封面的视频生成缩略图
-                                localDataSource.enqueueThumbnailGeneration(fallbackVideos)
-                            }
+                            localDataSource.saveVideos(fallbackVideos)
+                            // 异步为没有封面的视频生成缩略图
+                            localDataSource.enqueueThumbnailGeneration(fallbackVideos)
                             emit(AppResult.Success(fallbackVideos))
                         } else {
                             // 如果mock数据也没有，才发送错误
@@ -162,6 +158,8 @@ class VideoRepositoryImpl @Inject constructor(
             val remoteResult = remoteDataSource.getVideoDetail(videoId)
             if (remoteResult is AppResult.Success) {
                 localDataSource.saveVideo(remoteResult.data)
+                // 异步为没有封面的视频生成缩略图
+                localDataSource.enqueueThumbnailGeneration(listOf(remoteResult.data))
                 return remoteResult
             }
             // 如果远程获取失败，返回本地缓存
