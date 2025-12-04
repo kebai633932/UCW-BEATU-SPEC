@@ -6,9 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ucw.beatu.business.videofeed.domain.usecase.GetFeedUseCase
 import com.ucw.beatu.business.videofeed.presentation.mapper.toVideoItem
-import com.ucw.beatu.business.videofeed.presentation.model.FeedContentType
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
-import com.ucw.beatu.business.videofeed.presentation.model.VideoOrientation
+import com.ucw.beatu.shared.common.model.FeedContentType
+import com.ucw.beatu.shared.common.model.VideoItem
+import com.ucw.beatu.shared.common.model.VideoOrientation
 import com.ucw.beatu.shared.common.result.AppResult
 import com.ucw.beatu.shared.player.VideoPlayer
 import com.ucw.beatu.shared.player.model.VideoSource

@@ -17,9 +17,10 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.ucw.beatu.business.user.presentation.R
 import com.ucw.beatu.business.user.presentation.ui.adapter.UserWorksViewerAdapter
 import com.ucw.beatu.business.user.presentation.viewmodel.UserWorksViewerViewModel
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
-import com.ucw.beatu.business.videofeed.presentation.ui.VideoItemFragment
+import com.ucw.beatu.shared.common.model.VideoItem
+import com.ucw.beatu.shared.router.RouterRegistry
 import dagger.hilt.android.AndroidEntryPoint
+import android.util.Log
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.launch
@@ -108,18 +109,21 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer) {
 
     private fun handlePageSelected(position: Int) {
         val fragmentTag = "f$position"
-        val currentFragment =
-            childFragmentManager.findFragmentByTag(fragmentTag) as? VideoItemFragment
+        val currentFragment = childFragmentManager.findFragmentByTag(fragmentTag)
 
-        childFragmentManager.fragments
-            .filterIsInstance<VideoItemFragment>()
-            .forEach { fragment ->
+        // 使用 Router 接口调用 VideoItemFragment 的方法，避免编译时直接依赖
+        val router = RouterRegistry.getVideoItemRouter()
+        if (router != null) {
+            childFragmentManager.fragments.forEach { fragment ->
                 if (fragment == currentFragment && fragment.isVisible) {
-                    fragment.checkVisibilityAndPlay()
+                    router.checkVisibilityAndPlay(fragment)
                 } else {
-                    fragment.onParentVisibilityChanged(false)
+                    router.onParentVisibilityChanged(fragment, false)
                 }
             }
+        } else {
+            Log.e("UserWorksViewerFragment", "VideoItemRouter not registered")
+        }
     }
 
     companion object {

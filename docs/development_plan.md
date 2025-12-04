@@ -780,19 +780,6 @@
     - 后续：
       - 根据数据库表的选定，后续完善视频列表的显示
 
-- [x] 完善点击头像后的作者的个人主页显示
-    - 2025-12-02 - done by KJH
-    - 方案：
-    - 内容：
-      - 
-
-
-- [x] 完善搜索结果页面的结果显示
-    - 2025-12-02 - done by KJH
-    - 方案：
-    - 内容：
-        - 
-
 - [x] 文档整体对齐当前实现（客户端 + 后端）
     - 2025-12-03 - done by LRZ
     - 内容：
@@ -848,6 +835,79 @@
       - 子模块已成功初始化，代码已克隆到本地
       - 项目文档已更新，包含子模块初始化说明
       - 开发者可通过 README 快速了解如何初始化 AgentMCP 子模块
+
+- [x] 完善点击头像后的作者的个人主页显示
+    - 2025-12-04 - done by KJH
+    - 内容：
+      1. ✅ **扩展 VideoItem 模型**：
+         - 在 `VideoItem` 中添加 `authorId` 字段，用于获取用户详细信息
+         - 更新 `VideoMapper` 传递 `authorId` 从 Domain 层到 Presentation 层
+      2. ✅ **改造 UserProfileFragment 支持只读模式**：
+         - 添加 `readOnly` 参数，控制是否只读模式
+         - 只读模式下：隐藏返回按钮（toolbar）、禁用头像/名称/名言的编辑功能
+         - 保持代码复用，避免重复实现用户信息展示 UI
+      3. ✅ **实现点击头像交互**：
+         - 在 `VideoItemFragment` 中为作者头像和昵称添加点击事件
+         - 点击后触发 `showUserInfoOverlay()` 方法
+      4. ✅ **实现视频缩小和用户信息展示**：
+         - 使用 `ConstraintSet` 和 `TransitionManager` 实现布局动画
+         - 视频播放器缩小到上半部分（50%高度）
+         - 在 `item_video.xml` 中使用 `FragmentContainerView` 嵌入 `UserProfileFragment`（只读模式）
+         - 用户信息覆盖层显示在下半部分（50%高度）
+         - 点击视频区域可关闭用户信息，恢复全屏
+      5. ✅ **代码复用优化**：
+         - 复用 `UserProfileFragment` 而不是创建新的用户信息 View
+         - 删除重复的 `view_user_info_overlay.xml` 布局文件
+         - 通过参数控制 Fragment 的只读模式，实现 UI 复用
+      6. ✅ **解决模块循环依赖问题（Router 接口模式）**：
+         - **问题**：`videofeed:presentation` ↔ `user:presentation` 循环依赖导致 DataBinding 任务无法执行
+         - **解决方案1**：将 `VideoItem`、`FeedContentType`、`VideoOrientation` 移到 `shared:common` 模块，消除因共享模型导致的循环依赖
+         - **解决方案2**：创建 `shared:router` 模块，通过 Router 接口模式解耦两个模块（推荐💯）
+         - **技术细节**：
+           - `VideoItem` 移到 `shared/common/src/main/java/com/ucw/beatu/shared/common/model/VideoItem.kt`
+           - 更新所有引用 `VideoItem` 的文件（videofeed、user、landscape 模块）
+           - 创建 `shared:router` 模块，定义 `UserProfileRouter` 和 `VideoItemRouter` 接口
+           - 创建 `RouterRegistry` 单例用于注册和获取 Router 实例
+           - `videofeed:presentation` 实现 `VideoItemRouterImpl`，`user:presentation` 实现 `UserProfileRouterImpl`
+           - 在 `app` 模块的 `BeatUApp.onCreate()` 中注册所有 Router 实现
+           - `VideoItemFragment` 通过 `RouterRegistry.getUserProfileRouter()` 创建 Fragment
+           - `UserWorksViewerAdapter` 和 `UserWorksViewerFragment` 通过 `RouterRegistry.getVideoItemRouter()` 使用 Fragment
+           - 两个模块都只依赖 `shared:router`，不再互相依赖
+         - **优势**：
+           - ✅ 编译时类型安全，不需要反射
+           - ✅ 代码清晰，符合 Clean Architecture 和依赖倒置原则
+           - ✅ 易于维护和测试
+           - ✅ 彻底解决循环依赖问题
+         - **结果**：彻底解决循环依赖，Gradle 构建任务可以正常执行
+    - 技术亮点：
+      - **代码复用**：复用 `UserProfileFragment`，避免重复实现用户信息展示 UI，符合 DRY 原则
+      - **半屏交互**：视频缩小到上半部分，用户信息显示在下半部分，保持视频播放
+      - **平滑动画**：使用 ConstraintSet 和 TransitionManager 实现流畅的布局切换动画
+      - **可配置模式**：通过 `readOnly` 参数控制 Fragment 行为，一处维护，多处复用
+      - **循环依赖解决**：通过共享模型提取和 Router 接口模式，彻底解决模块间循环依赖问题，符合 Clean Architecture 原则
+    - 修改文件：
+      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/model/VideoItem.kt`
+      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/mapper/VideoMapper.kt`
+      - `BeatUClient/business/videofeed/presentation/src/main/res/layout/item_video.xml`
+      - `BeatUClient/business/user/presentation/src/main/java/com/ucw/beatu/business/user/presentation/ui/UserProfileFragment.kt`
+      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/VideoItemFragment.kt`
+      - `BeatUClient/shared/common/src/main/java/com/ucw/beatu/shared/common/model/VideoItem.kt`（新增）
+      - `BeatUClient/business/videofeed/presentation/build.gradle.kts`（移除循环依赖）
+      - `BeatUClient/business/user/presentation/build.gradle.kts`（移除循环依赖）
+
+
+- [x] 完善搜索结果页面的结果显示
+    - 2025-12-04 - done by KJH
+    - 方案：
+    - 内容：
+      - 
+
+- [x] 发布器的UI与数据连接
+    - 2025-12-04 - done by KJH
+    - 方案：
+    - 内容：
+      - 
+
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 

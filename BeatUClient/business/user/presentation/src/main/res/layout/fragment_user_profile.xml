@@ -19,7 +19,8 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:navigationIcon="?attr/homeAsUpIndicator"
         app:title="@string/user_profile_title"
-        app:titleTextColor="@android:color/white" />
+        app:titleTextColor="@android:color/white"
+        tools:visibility="visible" />
 
     <!-- 可滚动内容区域（只包含用户信息和统计信息） -->
     <androidx.core.widget.NestedScrollView

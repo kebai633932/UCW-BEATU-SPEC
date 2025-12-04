@@ -39,11 +39,11 @@ android {
 dependencies {
     // Business Domain
     implementation(project(":business:user:domain"))
-    implementation(project(":business:videofeed:presentation"))
     
     // Shared modules
     implementation(project(":shared:common"))
     implementation(project(":shared:designsystem"))
+    implementation(project(":shared:router"))
     
     // AndroidX
     implementation(libs.androidx.core.ktx)

@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":shared:database"))
     implementation(project(":shared:player"))
     implementation(project(":shared:designsystem"))
+    implementation(project(":shared:router"))
     
     // Business modules - Presentation layers
     implementation(project(":business:videofeed:presentation"))

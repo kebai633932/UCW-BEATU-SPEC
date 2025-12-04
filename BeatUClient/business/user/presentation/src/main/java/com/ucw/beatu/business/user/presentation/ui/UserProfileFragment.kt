@@ -35,8 +35,8 @@ import com.ucw.beatu.business.user.presentation.ui.adapter.UserWorkUiModel
 import com.ucw.beatu.business.user.presentation.ui.adapter.UserWorksAdapter
 import com.ucw.beatu.business.user.presentation.ui.UserWorksViewerFragment
 import com.ucw.beatu.business.user.presentation.viewmodel.UserProfileViewModel
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
-import com.ucw.beatu.business.videofeed.presentation.model.VideoOrientation
+import com.ucw.beatu.shared.common.model.VideoItem
+import com.ucw.beatu.shared.common.model.VideoOrientation
 import com.ucw.beatu.shared.common.navigation.NavigationHelper
 import com.ucw.beatu.shared.common.navigation.NavigationIds
 import dagger.hilt.android.AndroidEntryPoint
@@ -112,11 +112,19 @@ class UserProfileFragment : Fragment() {
         // 设置头像圆角裁剪
         setupAvatarRoundCorner(view)
 
-        // 设置头像点击上传
-        setupAvatarUpload()
+        // 只读模式下禁用编辑功能
+        if (!isReadOnly) {
+            // 设置头像点击上传
+            setupAvatarUpload()
 
-        // 设置名字和名言的点击编辑功能
-        setupEditableFields()
+            // 设置名字和名言的点击编辑功能
+            setupEditableFields()
+        } else {
+            // 只读模式：禁用头像、名称、名言的点击
+            ivAvatar.isClickable = false
+            tvUsername.isClickable = false
+            tvBio.isClickable = false
+        }
 
         // 初始化标签切换
         initTabs(view)
@@ -158,13 +166,19 @@ class UserProfileFragment : Fragment() {
         tvFollowersCount = view.findViewById(R.id.tv_followers_count)
         rvWorks = view.findViewById(R.id.rv_works)
 
-        toolbar.setNavigationOnClickListener {
-            // 优先走导航栈返回，兜底走 Activity 的 onBackPressedDispatcher
-            val navController = runCatching { findNavController() }.getOrNull()
-            if (navController != null && navController.popBackStack()) {
-                return@setNavigationOnClickListener
+        // 只读模式下隐藏返回按钮
+        if (isReadOnly) {
+            toolbar.navigationIcon = null
+            toolbar.title = null
+        } else {
+            toolbar.setNavigationOnClickListener {
+                // 优先走导航栈返回，兜底走 Activity 的 onBackPressedDispatcher
+                val navController = runCatching { findNavController() }.getOrNull()
+                if (navController != null && navController.popBackStack()) {
+                    return@setNavigationOnClickListener
+                }
+                requireActivity().onBackPressedDispatcher.onBackPressed()
             }
-            requireActivity().onBackPressedDispatcher.onBackPressed()
         }
     }
 
@@ -512,16 +526,24 @@ class UserProfileFragment : Fragment() {
     companion object {
         private const val TAG = "UserProfileFragment"
         private const val ARG_USER_ID = "user_id"
+        private const val ARG_READ_ONLY = "read_only"
 
         /**
          * 创建 Fragment 实例
+         * @param userId 用户ID，默认为当前用户
+         * @param readOnly 是否只读模式（隐藏返回按钮、禁用编辑功能），默认 false
          */
-        fun newInstance(userId: String? = null): UserProfileFragment {
+        fun newInstance(userId: String? = null, readOnly: Boolean = false): UserProfileFragment {
             return UserProfileFragment().apply {
                 arguments = Bundle().apply {
                     putString(ARG_USER_ID, userId)
+                    putBoolean(ARG_READ_ONLY, readOnly)
                 }
             }
         }
     }
+
+    // 是否只读模式
+    private val isReadOnly: Boolean
+        get() = arguments?.getBoolean(ARG_READ_ONLY, false) ?: false
 }

@@ -1,12 +1,10 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.kapt)
-    id("kotlin-parcelize")
 }
 
 android {
-    namespace = "com.ucw.beatu.shared.common"
+    namespace = "com.ucw.beatu.shared.router"
     compileSdk = 36
 
     defaultConfig {
@@ -34,21 +32,11 @@ android {
 }
 
 dependencies {
+    // Shared modules
+    implementation(project(":shared:common"))
+    
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
-    
-    // Navigation (for NavigationHelper)
-    // NavController is in navigation-runtime, which is included in navigation-fragment-ktx
-    // We use the fragment version to avoid adding unnecessary dependencies
-    implementation(libs.androidx.navigation.fragment.ktx)
-    
-    // Coroutines
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.coroutines.android)
-    
-    // Moshi (for API response annotations)
-    implementation(libs.moshi)
-    implementation(libs.moshi.kotlin)
-    kapt(libs.moshi.kotlin.codegen)
+    implementation(libs.androidx.fragment.ktx)
 }
 

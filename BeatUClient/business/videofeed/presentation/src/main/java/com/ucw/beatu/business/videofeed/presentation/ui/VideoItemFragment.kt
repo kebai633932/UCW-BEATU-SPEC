@@ -16,14 +16,20 @@ import androidx.viewpager2.widget.ViewPager2
 import androidx.navigation.NavController
 import androidx.navigation.fragment.findNavController
 import com.ucw.beatu.business.videofeed.presentation.R
-import com.ucw.beatu.business.videofeed.presentation.model.FeedContentType
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
-import com.ucw.beatu.business.videofeed.presentation.model.VideoOrientation
+import com.ucw.beatu.shared.common.model.FeedContentType
+import com.ucw.beatu.shared.common.model.VideoItem
+import com.ucw.beatu.shared.common.model.VideoOrientation
 import com.ucw.beatu.business.videofeed.presentation.viewmodel.VideoItemViewModel
 import com.ucw.beatu.shared.common.navigation.LandscapeLaunchContract
 import com.ucw.beatu.shared.common.navigation.NavigationHelper
 import com.ucw.beatu.shared.common.navigation.NavigationIds
 import com.ucw.beatu.shared.designsystem.widget.VideoControlsView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
+import androidx.transition.TransitionManager
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.commit
+import com.ucw.beatu.shared.router.RouterRegistry
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -55,6 +61,12 @@ class VideoItemFragment : BaseFeedItemFragment() {
     private var navigatingToLandscape = false
     private var hasPreparedPlayer = false
     private var imageAutoScrollJob: Job? = null
+    
+    // 用户信息展示相关
+    private var userInfoOverlay: View? = null
+    private var rootLayout: ConstraintLayout? = null
+    private var isUserInfoVisible = false
+    private var userProfileFragment: Fragment? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,9 +89,12 @@ class VideoItemFragment : BaseFeedItemFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        rootLayout = view as? ConstraintLayout
         playerView = view.findViewById(R.id.player_view)
         imagePager = view.findViewById(R.id.image_pager)
         controlsView = view.findViewById(R.id.video_controls)
+        userInfoOverlay = view.findViewById(R.id.user_info_overlay)
+        
         // 注意：全屏按钮及标题/频道名称等现在定义在 shared:designsystem 的 VideoControlsView 布局中
         val sharedControlsRoot = controlsView
         val fullScreenButton = sharedControlsRoot?.findViewById<View>(
@@ -91,9 +106,21 @@ class VideoItemFragment : BaseFeedItemFragment() {
             sharedControlsRoot?.findViewById<android.widget.TextView>(
                 com.ucw.beatu.shared.designsystem.R.id.tv_video_title
             )?.text = item.title
-            sharedControlsRoot?.findViewById<android.widget.TextView>(
+            val channelNameView = sharedControlsRoot?.findViewById<android.widget.TextView>(
                 com.ucw.beatu.shared.designsystem.R.id.tv_channel_name
-            )?.text = item.authorName
+            )
+            channelNameView?.text = item.authorName
+            
+            // 主页：点击作者头像/昵称显示用户信息（半屏展示）
+            val avatarView = sharedControlsRoot?.findViewById<android.widget.ImageView>(
+                com.ucw.beatu.shared.designsystem.R.id.iv_channel_avatar
+            )
+            val authorClickListener = View.OnClickListener {
+                showUserInfoOverlay(item.authorId, item.authorName)
+            }
+            avatarView?.setOnClickListener(authorClickListener)
+            channelNameView?.setOnClickListener(authorClickListener)
+            
             // 四个互动按钮下方的计数文案（与截图风格一致）
             sharedControlsRoot?.findViewById<android.widget.TextView>(
                 com.ucw.beatu.shared.designsystem.R.id.tv_like_count
@@ -482,5 +509,103 @@ class VideoItemFragment : BaseFeedItemFragment() {
     private fun stopImageAutoScroll() {
         imageAutoScrollJob?.cancel()
         imageAutoScrollJob = null
+    }
+
+    /**
+     * 显示用户信息覆盖层（视频缩小到上半部分，用户信息显示在下半部分）
+     */
+    private fun showUserInfoOverlay(authorId: String, authorName: String) {
+        if (isUserInfoVisible) {
+            hideUserInfoOverlay()
+            return
+        }
+        
+        val layout = rootLayout ?: return
+        val overlay = userInfoOverlay ?: return
+        val player = playerView ?: return
+        
+        isUserInfoVisible = true
+        
+        // 使用 ConstraintSet 实现布局动画
+        val constraintSet = ConstraintSet()
+        constraintSet.clone(layout)
+        
+        // 视频播放器缩小到上半部分（50%高度）
+        constraintSet.clear(R.id.player_view, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.player_view, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+        constraintSet.connect(R.id.player_view, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 0)
+        constraintSet.constrainPercentHeight(R.id.player_view, 0.5f)
+        
+        // 用户信息覆盖层显示在下半部分
+        constraintSet.clear(R.id.user_info_overlay, ConstraintSet.TOP)
+        constraintSet.connect(R.id.user_info_overlay, ConstraintSet.TOP, R.id.player_view, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.user_info_overlay, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+        constraintSet.constrainHeight(R.id.user_info_overlay, ConstraintSet.MATCH_CONSTRAINT)
+        
+        // 应用动画
+        TransitionManager.beginDelayedTransition(layout)
+        constraintSet.applyTo(layout)
+        
+        // 显示用户信息覆盖层
+        overlay.visibility = View.VISIBLE
+        
+        // 创建或显示 UserProfileFragment（只读模式）
+        // 使用 Router 接口创建 Fragment，避免编译时直接依赖，解决循环依赖问题
+        val userId = if (authorId.isNotEmpty()) authorId else authorName
+        val router = RouterRegistry.getUserProfileRouter()
+        if (router != null) {
+            val newFragment = router.createUserProfileFragment(userId, authorName, readOnly = true)
+            childFragmentManager.commit {
+                replace(R.id.user_info_overlay, newFragment)
+            }
+            userProfileFragment = newFragment
+        } else {
+            Log.e(TAG, "UserProfileRouter not registered")
+        }
+        
+        // 点击用户信息区域外部（视频区域）可关闭
+        player.setOnClickListener {
+            hideUserInfoOverlay()
+        }
+    }
+
+    /**
+     * 隐藏用户信息覆盖层（恢复全屏视频）
+     */
+    private fun hideUserInfoOverlay() {
+        if (!isUserInfoVisible) return
+        
+        val layout = rootLayout ?: return
+        val overlay = userInfoOverlay ?: return
+        val player = playerView ?: return
+        
+        isUserInfoVisible = false
+        
+        // 使用 ConstraintSet 恢复全屏布局
+        val constraintSet = ConstraintSet()
+        constraintSet.clone(layout)
+        
+        // 视频播放器恢复全屏
+        constraintSet.clear(R.id.player_view, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.player_view, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+        constraintSet.connect(R.id.player_view, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+        constraintSet.constrainPercentHeight(R.id.player_view, 1.0f)
+        
+        // 用户信息覆盖层隐藏
+        constraintSet.clear(R.id.user_info_overlay, ConstraintSet.TOP)
+        constraintSet.clear(R.id.user_info_overlay, ConstraintSet.BOTTOM)
+        constraintSet.constrainHeight(R.id.user_info_overlay, 0)
+        
+        // 应用动画
+        TransitionManager.beginDelayedTransition(layout)
+        constraintSet.applyTo(layout)
+        
+        // 隐藏用户信息覆盖层
+        overlay.visibility = View.GONE
+        
+        // 恢复视频点击事件
+        player.setOnClickListener {
+            viewModel.togglePlayPause()
+        }
     }
 }
