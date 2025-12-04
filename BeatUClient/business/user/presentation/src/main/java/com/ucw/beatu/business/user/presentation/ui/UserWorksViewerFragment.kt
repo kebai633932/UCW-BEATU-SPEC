@@ -121,10 +121,18 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
     }
 
     private fun parseArgumentsIfNeeded(bundle: Bundle) {
-        val userId = bundle.getString(ARG_USER_ID) ?: return
+        val userId = bundle.getString(ARG_USER_ID)
         val initialIndex = bundle.getInt(ARG_INITIAL_INDEX, 0)
         val videos = BundleCompat.getParcelableArrayList(bundle, ARG_VIDEO_LIST, VideoItem::class.java)
             ?: arrayListOf()
+
+        Log.d(TAG, "parseArgumentsIfNeeded: userId=$userId, initialIndex=$initialIndex, videoListSize=${videos.size}")
+
+        if (userId.isNullOrEmpty()) {
+            Log.e(TAG, "parseArgumentsIfNeeded: userId is null or empty, skip init")
+            return
+        }
+
         viewModel.setInitialData(userId, videos, initialIndex)
     }
 
@@ -132,8 +140,10 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
+                    Log.d(TAG, "collectUiState: videoListSize=${state.videoList.size}, currentIndex=${state.currentIndex}")
                     adapter?.submitList(state.videoList)
                     if (state.videoList.isEmpty()) {
+                        Log.w(TAG, "collectUiState: video list is empty, nothing to show")
                         return@collect
                     }
                     val desiredIndex = state.currentIndex.coerceIn(0, max(state.videoList.lastIndex, 0))
