@@ -541,17 +541,21 @@ class VideoItemViewModel @Inject constructor(
 
         viewModelScope.launch {
             val result = if (targetLiked) {
+                android.util.Log.d("VideoItemViewModel", "toggleLike: 调用 likeVideoUseCase, videoId=$videoId")
                 likeVideoUseCase(videoId)
             } else {
+                android.util.Log.d("VideoItemViewModel", "toggleLike: 调用 unlikeVideoUseCase, videoId=$videoId")
                 unlikeVideoUseCase(videoId)
             }
 
             _uiState.value = when (result) {
                 is AppResult.Success -> {
+                    android.util.Log.d("VideoItemViewModel", "toggleLike: 成功, videoId=$videoId")
                     // 后端成功：只结束交互状态，保留乐观状态
                     _uiState.value.copy(isInteracting = false)
                 }
                 is AppResult.Error -> {
+                    android.util.Log.e("VideoItemViewModel", "toggleLike: 失败, videoId=$videoId", result.throwable)
                     // 失败：保留当前乐观状态，只记录错误，交由 UI 以 Toast 提示
                     _uiState.value.copy(
                         isInteracting = false,
@@ -586,16 +590,20 @@ class VideoItemViewModel @Inject constructor(
 
         viewModelScope.launch {
             val result = if (targetFavorited) {
+                android.util.Log.d("VideoItemViewModel", "toggleFavorite: 调用 favoriteVideoUseCase, videoId=$videoId")
                 favoriteVideoUseCase(videoId)
             } else {
+                android.util.Log.d("VideoItemViewModel", "toggleFavorite: 调用 unfavoriteVideoUseCase, videoId=$videoId")
                 unfavoriteVideoUseCase(videoId)
             }
 
             _uiState.value = when (result) {
                 is AppResult.Success -> {
+                    android.util.Log.d("VideoItemViewModel", "toggleFavorite: 成功, videoId=$videoId")
                     _uiState.value.copy(isInteracting = false)
                 }
                 is AppResult.Error -> {
+                    android.util.Log.e("VideoItemViewModel", "toggleFavorite: 失败, videoId=$videoId", result.throwable)
                     _uiState.value.copy(
                         isInteracting = false,
                         error = result.throwable.message ?: "收藏失败，请稍后重试"

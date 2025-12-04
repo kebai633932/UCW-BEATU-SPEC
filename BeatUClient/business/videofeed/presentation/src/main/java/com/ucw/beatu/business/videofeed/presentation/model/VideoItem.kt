@@ -32,6 +32,8 @@ data class VideoItem(
     val commentCount: Int,
     val favoriteCount: Int,
     val shareCount: Int,
+    val isLiked: Boolean = false,
+    val isFavorited: Boolean = false,
     val orientation: VideoOrientation = VideoOrientation.PORTRAIT,
     val type: FeedContentType = FeedContentType.VIDEO,
     val imageUrls: List<String> = emptyList(),

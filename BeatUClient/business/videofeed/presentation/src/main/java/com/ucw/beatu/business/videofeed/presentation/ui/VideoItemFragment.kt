@@ -111,8 +111,8 @@ class VideoItemFragment : BaseFeedItemFragment() {
             // 初始化互动状态
             viewModel.initInteractionState(
                 videoId = item.id,
-                isLiked = false, // TODO: 从VideoItem中获取实际状态
-                isFavorited = false, // TODO: 从VideoItem中获取实际状态
+                isLiked = item.isLiked,
+                isFavorited = item.isFavorited,
                 likeCount = item.likeCount.toLong(),
                 favoriteCount = item.favoriteCount.toLong()
             )

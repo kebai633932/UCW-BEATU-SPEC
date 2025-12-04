@@ -448,7 +448,7 @@
   - 量化指标：弱网/断网场景下推荐页可播放率从 0% → 100%；首次降级加载耗时 < 150 ms（Mock 列表内存生成）
 
 - [x] 视频流网络请求优化：弱网环境下流畅滑动保障
-  - 2025-12-XX - done by LRZ
+  - 2025-12-XX - done by AI
   - 需求：视频数据拉取后端数据失败时会卡顿十多秒，导致界面无法操作，即使在弱网环境下也需要保证用户可以流畅上下滑动视频流页面。
   - 方案：
     1. **ViewModel层优化**：
@@ -792,62 +792,6 @@
     - 方案：
     - 内容：
         - 
-
-- [x] 文档整体对齐当前实现（客户端 + 后端）
-    - 2025-12-03 - done by LRZ
-    - 内容：
-        1. 更新根目录 `README.md` 的顶层仓库结构说明，将原先的逻辑服务目录（BeatUAIService / BeatUContentService / BeatUGateway / BeatUObservability）调整为实际存在的 `BeatUClient` 与 `BeatUBackend`，并明确说明后端采用 FastAPI 单体承载上述服务职责。
-        2. 在 `docs/architecture.md` 中补充说明：当前物理实现为 `BeatUBackend` 工程，内部按 Gateway / ContentService / AIService / Observability 职责划分路由与 Service 层，保持与 `docs/backend/*` 的契约一致。
-        3. 对齐客户端网络配置文档：更新 `BeatUClient/CONFIG.md`、`BeatUClient/docs/data-layer-architecture.md` 与 `BeatUClient/docs/backend_integration_checklist.md`，改为通过 `config.xml` 的 `base_url` 统一配置网关地址（默认 `http://127.0.0.1:9306/`），取消对已删除 `BASE_URL` 常量的引用，并补充 `remote_request_timeout_ms` 等新配置项说明。
-        4. 保持后端文档 `docs/backend/*` 与 `BeatUBackend/docs/*` 的 API/模型描述一致，仅做引用关系梳理，不修改已与实现完全对齐的细节。
-
-- [x] 配置管理规则制定与硬编码参数迁移
-    - 2025-12-XX - done by LRZ
-    - 内容：
-        1. ✅ **配置管理规则制定**：
-           - 在 `.cursor/rules/01-core-principles.mdc` 中新增"配置管理原则"章节
-           - 在 `.cursor/rules/00-important-reminders.mdc` 中添加配置管理简要提醒
-           - 明确规则：优先使用配置文件参数而非硬编码；代码不再使用的配置参数必须从配置文件删除
-        2. ✅ **前端配置参数迁移**：
-           - 在 `config.xml` 中添加所有可配置参数（网络缓存大小、播放器池大小、预加载数量、分页大小、缓存页面数等）
-           - 修复所有硬编码参数，改为从 `config.xml` 读取
-           - 修改文件：`NetworkConfig.kt`、`OkHttpProvider.kt`、`VideoPlayerConfig.kt`、`VideoPlayerPool.kt`、`VideoFeedPresentationModule.kt`、`RecommendViewModel.kt`、`VideoRepositoryImpl.kt`
-        3. ✅ **后端配置参数迁移**：
-           - 在 `core/config.py` 中添加所有可配置参数（API前缀、分页默认值和最大值、默认用户信息等）
-           - 修复所有硬编码参数，改为从配置文件读取（支持 `.env` 文件和环境变量）
-           - 修改文件：`main.py`、`routes/videos.py`
-    - 技术亮点：
-      - **统一配置管理**：前后端所有关键参数都从配置文件读取，便于环境差异化配置
-      - **快速失败机制**：超时配置统一设置为较短时间（1秒/3秒），快速发现问题
-      - **易于维护**：修改配置无需改动代码，只需编辑配置文件
-      - **配置生命周期管理**：代码不再使用的配置参数会从配置文件删除，保持一致性
-    - 量化指标：
-      - 前端配置项：新增 9 个可配置参数（网络缓存、播放器配置、分页配置等）
-      - 后端配置项：新增 7 个可配置参数（API前缀、分页配置、默认用户信息等）
-      - 硬编码消除率：100%（所有关键参数均已配置化）
-    - 成果：
-      - 配置管理规则已写入 Cursor 规则文件，确保后续开发遵循
-      - 前后端配置文件完整，所有关键参数均可配置
-      - 代码与配置完全解耦，支持不同环境使用不同配置
-
-- [x] AgentMCP 子模块初始化与文档更新
-    - 2025-12-03 - done by lrz
-    - 内容：
-        1. ✅ **子模块初始化**：
-           - 执行 `git submodule update --init --recursive AgentMCP` 初始化 Git 子模块
-           - 确认子模块已成功克隆到本地
-        2. ✅ **文档更新**：
-           - 在根目录 `README.md` 中添加 AgentMCP 到仓库结构说明
-           - 在 `README.md` 中添加 AgentMCP 子模块初始化步骤说明
-           - 在 `docs/development_plan.md` 中记录子模块初始化任务
-    - 技术说明：
-      - AgentMCP 是一个基于 LangChain 的智能体系统，用于动态发现和调用 MCP（Model Context Protocol）服务
-      - 子模块仓库地址：`https://github.com/Tom6255/AgentMCP.git`
-      - 初始化后需要创建 Python 虚拟环境并安装依赖（参考 `AgentMCP/README.md`）
-    - 成果：
-      - 子模块已成功初始化，代码已克隆到本地
-      - 项目文档已更新，包含子模块初始化说明
-      - 开发者可通过 README 快速了解如何初始化 AgentMCP 子模块
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 

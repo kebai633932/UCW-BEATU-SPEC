@@ -24,13 +24,13 @@ interface UserApiService {
      * POST /api/users/{id}/follow
      */
     @POST("api/users/{id}/follow")
-    suspend fun followUser(@Path("id") userId: String): ApiResponse<Unit>
+    suspend fun followUser(@Path("id") userId: String): ApiResponse<Any?>
 
     /**
      * 取消关注用户
      * POST /api/users/{id}/unfollow
      */
     @POST("api/users/{id}/unfollow")
-    suspend fun unfollowUser(@Path("id") userId: String): ApiResponse<Unit>
+    suspend fun unfollowUser(@Path("id") userId: String): ApiResponse<Any?>
 }
 
