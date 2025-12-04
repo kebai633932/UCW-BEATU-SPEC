@@ -2,8 +2,8 @@ package com.ucw.beatu.business.videofeed.presentation.ui.adapter
 
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
-import com.ucw.beatu.business.videofeed.presentation.model.FeedContentType
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
+import com.ucw.beatu.shared.common.model.FeedContentType
+import com.ucw.beatu.shared.common.model.VideoItem
 import com.ucw.beatu.business.videofeed.presentation.ui.ImagePostFragment
 import com.ucw.beatu.business.videofeed.presentation.ui.VideoItemFragment
 

@@ -1,7 +1,7 @@
 package com.ucw.beatu.business.user.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
+import com.ucw.beatu.shared.common.model.VideoItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,5 +40,3 @@ class UserWorksViewerViewModel @Inject constructor() : ViewModel() {
 
     fun getVideoAt(position: Int): VideoItem? = _uiState.value.videoList.getOrNull(position)
 }
-
-

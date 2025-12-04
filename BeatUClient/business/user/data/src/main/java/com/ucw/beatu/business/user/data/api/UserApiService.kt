@@ -20,6 +20,13 @@ interface UserApiService {
     suspend fun getUserById(@Path("id") userId: String): ApiResponse<UserDto>
 
     /**
+     * 根据用户名获取用户信息
+     * GET /api/users/name/{name}
+     */
+    @GET("api/users/name/{name}")
+    suspend fun getUserByName(@Path("name") userName: String): ApiResponse<UserDto>
+
+    /**
      * 关注用户
      * POST /api/users/{id}/follow
      */

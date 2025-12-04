@@ -16,7 +16,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.viewpager2.widget.ViewPager2
 import com.ucw.beatu.business.videofeed.presentation.R
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
+import com.ucw.beatu.shared.common.model.VideoItem
 import com.ucw.beatu.business.videofeed.presentation.ui.adapter.VideoFeedAdapter
 import com.ucw.beatu.business.videofeed.presentation.viewmodel.RecommendViewModel
 import com.ucw.beatu.shared.common.navigation.NavigationHelper

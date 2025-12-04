@@ -48,6 +48,7 @@ dependencies {
     implementation(project(":shared:common"))
     implementation(project(":shared:player"))
     implementation(project(":shared:designsystem"))
+    implementation(project(":shared:router"))
     
     // AndroidX
     implementation(libs.androidx.core.ktx)

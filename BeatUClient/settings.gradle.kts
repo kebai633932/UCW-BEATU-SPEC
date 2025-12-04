@@ -28,6 +28,7 @@ include(":shared:network")
 include(":shared:database")
 include(":shared:player")
 include(":shared:designsystem")
+include(":shared:router")
 
 // Business modules (按业务边界划分)
 include(":business:videofeed:presentation")

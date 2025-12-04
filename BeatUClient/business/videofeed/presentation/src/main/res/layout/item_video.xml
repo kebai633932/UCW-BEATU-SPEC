@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -14,22 +14,46 @@
         android:visibility="visible"
         app:surface_type="surface_view"
         app:use_controller="false"
-        app:resize_mode="fit" />
+        app:resize_mode="fit"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- 图文内容容器：全屏图片轮播，用于“图文+音乐”场景 -->
+    <!-- 图文内容容器：全屏图片轮播，用于"图文+音乐"场景 -->
     <androidx.viewpager2.widget.ViewPager2
         android:id="@+id/image_pager"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         tools:visibility="gone" />
 
     <!-- 通用视频控制视图：播放覆盖层 + 底部完整信息区（集数/标题/进度/点赞等） -->
     <com.ucw.beatu.shared.designsystem.widget.VideoControlsView
         android:id="@+id/video_controls"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-</FrameLayout>
+    <!-- 用户信息覆盖层（点击头像后显示在下半部分，复用 UserProfileFragment） -->
+    <!-- 注意：不在此处指定 android:name，而是在代码中通过反射动态创建 Fragment，避免编译时循环依赖 -->
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/user_info_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/player_view"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
 
 

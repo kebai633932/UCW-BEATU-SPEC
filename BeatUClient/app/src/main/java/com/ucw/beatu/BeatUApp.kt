@@ -4,7 +4,10 @@ import android.app.Application
 import android.util.Log
 import com.ucw.beatu.business.user.domain.model.User
 import com.ucw.beatu.business.user.domain.repository.UserRepository
+import com.ucw.beatu.business.user.presentation.router.UserProfileRouterImpl
+import com.ucw.beatu.business.videofeed.presentation.router.VideoItemRouterImpl
 import com.ucw.beatu.shared.common.mock.MockUserCatalog
+import com.ucw.beatu.shared.router.RouterRegistry
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +32,16 @@ class BeatUApp : Application() {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * 注册 Router 实现
+     * 通过 RouterRegistry 注册各个模块的 Router 实现，解决模块间循环依赖
+     */
+    private fun registerRouters() {
+        RouterRegistry.registerUserProfileRouter(UserProfileRouterImpl())
+        RouterRegistry.registerVideoItemRouter(VideoItemRouterImpl())
+        Log.d(TAG, "registerRouters: Routers registered successfully")
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate: Application started")
@@ -36,6 +49,8 @@ class BeatUApp : Application() {
         try {
             // 初始化逻辑可以在这里添加
             // 例如：初始化日志、性能监控、崩溃收集等
+            // 注册 Router 实现，解决模块间循环依赖
+            registerRouters()
             // 在应用启动时初始化 Mock 用户数据（基于 MockVideoCatalog）
             initMockUsersOnce()
             Log.d(TAG, "onCreate: Application initialized successfully")

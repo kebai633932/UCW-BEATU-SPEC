@@ -18,9 +18,9 @@ import androidx.viewpager2.widget.ViewPager2
 import androidx.navigation.NavController
 import androidx.navigation.fragment.findNavController
 import com.ucw.beatu.business.videofeed.presentation.R
-import com.ucw.beatu.business.videofeed.presentation.model.FeedContentType
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
-import com.ucw.beatu.business.videofeed.presentation.model.VideoOrientation
+import com.ucw.beatu.shared.common.model.FeedContentType
+import com.ucw.beatu.shared.common.model.VideoItem
+import com.ucw.beatu.shared.common.model.VideoOrientation
 import com.ucw.beatu.business.videofeed.presentation.viewmodel.VideoItemViewModel
 import com.ucw.beatu.business.videofeed.presentation.share.SharePosterGenerator
 import com.ucw.beatu.business.videofeed.presentation.share.ShareImageUtils
@@ -29,6 +29,11 @@ import com.ucw.beatu.shared.common.navigation.NavigationHelper
 import com.ucw.beatu.shared.common.navigation.NavigationIds
 import com.ucw.beatu.shared.designsystem.widget.VideoControlsView
 import coil.load
+import com.ucw.beatu.shared.router.RouterRegistry
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
+import androidx.transition.TransitionManager
+import androidx.fragment.app.Fragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -61,6 +66,13 @@ class VideoItemFragment : BaseFeedItemFragment() {
     private var hasPreparedPlayer = false
     private var imageAutoScrollJob: Job? = null
 
+    // 用户信息展示相关
+    private var userInfoOverlay: View? = null
+    private var rootLayout: ConstraintLayout? = null
+    private var isUserInfoVisible = false
+    private var userProfileFragment: Fragment? = null
+    private var userProfileDialogFragment: UserProfileDialogFragment? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         videoItem = arguments?.let {
@@ -82,6 +94,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        rootLayout = view as? ConstraintLayout
         playerView = view.findViewById(R.id.player_view)
         imagePager = view.findViewById(R.id.image_pager)
          controlsView = view.findViewById(R.id.video_controls)
@@ -116,6 +129,19 @@ class VideoItemFragment : BaseFeedItemFragment() {
                     error(placeholderRes)
                 }
             }
+            )
+            channelNameView?.text = item.authorName
+
+            // 主页：点击作者头像/昵称显示用户信息（半屏展示）
+            val avatarView = sharedControlsRoot?.findViewById<android.widget.ImageView>(
+                com.ucw.beatu.shared.designsystem.R.id.iv_channel_avatar
+            )
+            val authorClickListener = View.OnClickListener {
+                showUserInfoOverlay(item.authorId, item.authorName)
+            }
+            avatarView?.setOnClickListener(authorClickListener)
+            channelNameView?.setOnClickListener(authorClickListener)
+
             // 四个互动按钮下方的计数文案（与截图风格一致）
             sharedControlsRoot?.findViewById<android.widget.TextView>(
                 com.ucw.beatu.shared.designsystem.R.id.tv_like_count
@@ -253,8 +279,13 @@ class VideoItemFragment : BaseFeedItemFragment() {
         fullScreenButton?.setOnClickListener { openLandscapeMode() }
 
         // A：点视频区域 = 播放/暂停切换（仅视频内容生效）
+        // 如果用户信息覆盖层可见，点击视频区域则关闭覆盖层；否则切换播放/暂停
         playerView?.setOnClickListener {
-            viewModel.togglePlayPause()
+            if (isUserInfoVisible) {
+                hideUserInfoOverlay()
+            } else {
+                viewModel.togglePlayPause()
+            }
         }
 
     }
@@ -568,4 +599,164 @@ class VideoItemFragment : BaseFeedItemFragment() {
         imageAutoScrollJob?.cancel()
         imageAutoScrollJob = null
     }
+
+    /**
+     * 显示用户信息弹窗（类似评论弹窗，从底部弹出）
+     * 视频缩小到上半部分，用户信息从底部弹出占据下半部分
+     */
+    private fun showUserInfoOverlay(authorId: String, authorName: String) {
+        if (isUserInfoVisible) {
+            hideUserInfoOverlay()
+            return
+        }
+
+        val layout = rootLayout ?: return
+        val player = playerView ?: return
+
+        isUserInfoVisible = true
+
+        // 不暂停视频播放，继续播放
+
+        // 使用 ConstraintSet 实现布局动画：视频缩小到上半部分
+        val constraintSet = ConstraintSet()
+        constraintSet.clone(layout)
+
+        // 视频播放器缩小到上半部分（50%高度）
+        constraintSet.clear(R.id.player_view, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.player_view, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+        constraintSet.connect(R.id.player_view, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 0)
+        constraintSet.constrainPercentHeight(R.id.player_view, 0.5f)
+
+        // 同时调整 image_pager 和 video_controls 的高度，确保它们也缩小到上半部分
+        constraintSet.clear(R.id.image_pager, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.image_pager, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+        constraintSet.connect(R.id.image_pager, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 0)
+        constraintSet.constrainPercentHeight(R.id.image_pager, 0.5f)
+
+        constraintSet.clear(R.id.video_controls, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.video_controls, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+        constraintSet.connect(R.id.video_controls, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.TOP, 0)
+        constraintSet.constrainPercentHeight(R.id.video_controls, 0.5f)
+
+        // 应用动画
+        TransitionManager.beginDelayedTransition(layout)
+        constraintSet.applyTo(layout)
+
+        // 显示用户信息 DialogFragment（从底部弹出）
+        val userId = if (authorId.isNotEmpty()) authorId else authorName
+        userProfileDialogFragment = UserProfileDialogFragment.newInstance(userId, authorName)
+        userProfileDialogFragment?.setOnDismissListener {
+            hideUserInfoOverlay()
+        }
+        // 设置视频点击回调，当在个人主页中点击视频时，关闭Dialog并导航到视频播放器
+        userProfileDialogFragment?.setOnVideoClickListener { userId, authorName, videoItems, initialIndex ->
+            // 关闭Dialog
+            hideUserInfoOverlay()
+            // 导航到视频播放器
+            navigateToUserWorksViewer(userId, videoItems, initialIndex)
+        }
+        userProfileDialogFragment?.show(parentFragmentManager, "UserProfileDialog")
+    }
+
+    /**
+     * 隐藏用户信息弹窗（恢复全屏视频）
+     */
+    private fun hideUserInfoOverlay() {
+        if (!isUserInfoVisible) return
+
+        // 关闭 DialogFragment
+        userProfileDialogFragment?.dismissAllowingStateLoss()
+        userProfileDialogFragment = null
+
+        val layout = rootLayout ?: return
+
+        isUserInfoVisible = false
+
+        // 使用 ConstraintSet 恢复全屏布局
+        val constraintSet = ConstraintSet()
+        constraintSet.clone(layout)
+
+        // 视频播放器恢复全屏
+        constraintSet.clear(R.id.player_view, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.player_view, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+        constraintSet.connect(R.id.player_view, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+        constraintSet.constrainPercentHeight(R.id.player_view, 1.0f)
+
+        // 同时恢复 image_pager 和 video_controls 的全屏高度
+        constraintSet.clear(R.id.image_pager, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.image_pager, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+        constraintSet.connect(R.id.image_pager, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+        constraintSet.constrainPercentHeight(R.id.image_pager, 1.0f)
+
+        constraintSet.clear(R.id.video_controls, ConstraintSet.BOTTOM)
+        constraintSet.connect(R.id.video_controls, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
+        constraintSet.connect(R.id.video_controls, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+        constraintSet.constrainPercentHeight(R.id.video_controls, 1.0f)
+
+        // 应用动画
+        TransitionManager.beginDelayedTransition(layout)
+        constraintSet.applyTo(layout)
+
+        // 不恢复播放（因为从未暂停），继续播放
+    }
+
+    /**
+     * 导航到用户作品播放器
+     */
+    private fun navigateToUserWorksViewer(userId: String, videoItems: ArrayList<VideoItem>, initialIndex: Int) {
+        val navController = findParentNavController()
+        if (navController == null) {
+            Log.e(TAG, "NavController not found, cannot open user works viewer")
+            return
+        }
+
+        // 检查当前是否已经在 userWorksViewer 页面
+        val currentDestination = navController.currentDestination
+        val userWorksViewerDestinationId = NavigationHelper.getResourceId(
+            requireContext(),
+            NavigationIds.USER_WORKS_VIEWER
+        )
+        val isInUserWorksViewer = currentDestination?.id == userWorksViewerDestinationId
+
+        if (isInUserWorksViewer) {
+            // 已经在 userWorksViewer 页面，检查是否是同一个用户
+            val router = RouterRegistry.getUserWorksViewerRouter()
+            val currentUserId = router?.getCurrentUserId()
+
+            if (currentUserId == userId && router != null) {
+                // 同一个用户，通过 Router 切换到对应的视频
+                Log.d(TAG, "Already in user works viewer for user $userId, switching to video at index $initialIndex")
+                val success = router.switchToVideo(initialIndex)
+                if (success) {
+                    // 成功切换，关闭用户信息弹窗
+                    hideUserInfoOverlay()
+                    return
+                } else {
+                    Log.w(TAG, "Failed to switch video in UserWorksViewer, falling back to navigation")
+                }
+            } else {
+                // 不同用户，允许导航到新用户的作品列表
+                Log.d(TAG, "Already in user works viewer but different user (current: $currentUserId, target: $userId), allowing navigation")
+            }
+        }
+
+        // 从 feed fragment 导航，使用 feed 到 userWorksViewer 的动作
+        val actionId = NavigationHelper.getResourceId(
+            requireContext(),
+            NavigationIds.ACTION_FEED_TO_USER_WORKS_VIEWER
+        )
+        if (actionId == 0) {
+            Log.e(TAG, "Navigation action not found for user works viewer")
+            return
+        }
+
+        // 使用字符串常量避免循环依赖
+        val bundle = bundleOf(
+            "user_id" to userId,
+            "initial_index" to initialIndex,
+            "video_list" to videoItems
+        )
+        navController.navigate(actionId, bundle)
+    }
+
 }

@@ -457,7 +457,7 @@
   - 量化指标：弱网/断网场景下推荐页可播放率从 0% → 100%；首次降级加载耗时 < 150 ms（Mock 列表内存生成）
 
 - [x] 视频流网络请求优化：弱网环境下流畅滑动保障
-  - 2025-12-XX - done by AI
+  - 2025-12-XX - done by LRZ
   - 需求：视频数据拉取后端数据失败时会卡顿十多秒，导致界面无法操作，即使在弱网环境下也需要保证用户可以流畅上下滑动视频流页面。
   - 方案：
     1. **ViewModel层优化**：
@@ -789,18 +789,134 @@
     - 后续：
       - 根据数据库表的选定，后续完善视频列表的显示
 
+- [x] 文档整体对齐当前实现（客户端 + 后端）
+    - 2025-12-03 - done by LRZ
+    - 内容：
+        1. 更新根目录 `README.md` 的顶层仓库结构说明，将原先的逻辑服务目录（BeatUAIService / BeatUContentService / BeatUGateway / BeatUObservability）调整为实际存在的 `BeatUClient` 与 `BeatUBackend`，并明确说明后端采用 FastAPI 单体承载上述服务职责。
+        2. 在 `docs/architecture.md` 中补充说明：当前物理实现为 `BeatUBackend` 工程，内部按 Gateway / ContentService / AIService / Observability 职责划分路由与 Service 层，保持与 `docs/backend/*` 的契约一致。
+        3. 对齐客户端网络配置文档：更新 `BeatUClient/CONFIG.md`、`BeatUClient/docs/data-layer-architecture.md` 与 `BeatUClient/docs/backend_integration_checklist.md`，改为通过 `config.xml` 的 `base_url` 统一配置网关地址（默认 `http://127.0.0.1:9306/`），取消对已删除 `BASE_URL` 常量的引用，并补充 `remote_request_timeout_ms` 等新配置项说明。
+        4. 保持后端文档 `docs/backend/*` 与 `BeatUBackend/docs/*` 的 API/模型描述一致，仅做引用关系梳理，不修改已与实现完全对齐的细节。
+
+- [x] 配置管理规则制定与硬编码参数迁移
+    - 2025-12-XX - done by LRZ
+    - 内容：
+        1. ✅ **配置管理规则制定**：
+           - 在 `.cursor/rules/01-core-principles.mdc` 中新增"配置管理原则"章节
+           - 在 `.cursor/rules/00-important-reminders.mdc` 中添加配置管理简要提醒
+           - 明确规则：优先使用配置文件参数而非硬编码；代码不再使用的配置参数必须从配置文件删除
+        2. ✅ **前端配置参数迁移**：
+           - 在 `config.xml` 中添加所有可配置参数（网络缓存大小、播放器池大小、预加载数量、分页大小、缓存页面数等）
+           - 修复所有硬编码参数，改为从 `config.xml` 读取
+           - 修改文件：`NetworkConfig.kt`、`OkHttpProvider.kt`、`VideoPlayerConfig.kt`、`VideoPlayerPool.kt`、`VideoFeedPresentationModule.kt`、`RecommendViewModel.kt`、`VideoRepositoryImpl.kt`
+        3. ✅ **后端配置参数迁移**：
+           - 在 `core/config.py` 中添加所有可配置参数（API前缀、分页默认值和最大值、默认用户信息等）
+           - 修复所有硬编码参数，改为从配置文件读取（支持 `.env` 文件和环境变量）
+           - 修改文件：`main.py`、`routes/videos.py`
+    - 技术亮点：
+      - **统一配置管理**：前后端所有关键参数都从配置文件读取，便于环境差异化配置
+      - **快速失败机制**：超时配置统一设置为较短时间（1秒/3秒），快速发现问题
+      - **易于维护**：修改配置无需改动代码，只需编辑配置文件
+      - **配置生命周期管理**：代码不再使用的配置参数会从配置文件删除，保持一致性
+    - 量化指标：
+      - 前端配置项：新增 9 个可配置参数（网络缓存、播放器配置、分页配置等）
+      - 后端配置项：新增 7 个可配置参数（API前缀、分页配置、默认用户信息等）
+      - 硬编码消除率：100%（所有关键参数均已配置化）
+    - 成果：
+      - 配置管理规则已写入 Cursor 规则文件，确保后续开发遵循
+      - 前后端配置文件完整，所有关键参数均可配置
+      - 代码与配置完全解耦，支持不同环境使用不同配置
+
+- [x] AgentMCP 子模块初始化与文档更新
+    - 2025-12-03 - done by AI
+    - 内容：
+        1. ✅ **子模块初始化**：
+           - 执行 `git submodule update --init --recursive AgentMCP` 初始化 Git 子模块
+           - 确认子模块已成功克隆到本地
+        2. ✅ **文档更新**：
+           - 在根目录 `README.md` 中添加 AgentMCP 到仓库结构说明
+           - 在 `README.md` 中添加 AgentMCP 子模块初始化步骤说明
+           - 在 `docs/development_plan.md` 中记录子模块初始化任务
+    - 技术说明：
+      - AgentMCP 是一个基于 LangChain 的智能体系统，用于动态发现和调用 MCP（Model Context Protocol）服务
+      - 子模块仓库地址：`https://github.com/Tom6255/AgentMCP.git`
+      - 初始化后需要创建 Python 虚拟环境并安装依赖（参考 `AgentMCP/README.md`）
+    - 成果：
+      - 子模块已成功初始化，代码已克隆到本地
+      - 项目文档已更新，包含子模块初始化说明
+      - 开发者可通过 README 快速了解如何初始化 AgentMCP 子模块
+
 - [x] 完善点击头像后的作者的个人主页显示
-    - 2025-12-02 - done by KJH
+    - 2025-12-04 - done by KJH
+    - 内容：
+      1. ✅ **扩展 VideoItem 模型**：
+         - 在 `VideoItem` 中添加 `authorId` 字段，用于获取用户详细信息
+         - 更新 `VideoMapper` 传递 `authorId` 从 Domain 层到 Presentation 层
+      2. ✅ **改造 UserProfileFragment 支持只读模式**：
+         - 添加 `readOnly` 参数，控制是否只读模式
+         - 只读模式下：隐藏返回按钮（toolbar）、禁用头像/名称/名言的编辑功能
+         - 保持代码复用，避免重复实现用户信息展示 UI
+      3. ✅ **实现点击头像交互**：
+         - 在 `VideoItemFragment` 中为作者头像和昵称添加点击事件
+         - 点击后触发 `showUserInfoOverlay()` 方法
+      4. ✅ **实现视频缩小和用户信息展示**：
+         - 使用 `ConstraintSet` 和 `TransitionManager` 实现布局动画
+         - 视频播放器缩小到上半部分（50%高度）
+         - 在 `item_video.xml` 中使用 `FragmentContainerView` 嵌入 `UserProfileFragment`（只读模式）
+         - 用户信息覆盖层显示在下半部分（50%高度）
+         - 点击视频区域可关闭用户信息，恢复全屏
+      5. ✅ **代码复用优化**：
+         - 复用 `UserProfileFragment` 而不是创建新的用户信息 View
+         - 删除重复的 `view_user_info_overlay.xml` 布局文件
+         - 通过参数控制 Fragment 的只读模式，实现 UI 复用
+      6. ✅ **解决模块循环依赖问题（Router 接口模式）**：
+         - **问题**：`videofeed:presentation` ↔ `user:presentation` 循环依赖导致 DataBinding 任务无法执行
+         - **解决方案1**：将 `VideoItem`、`FeedContentType`、`VideoOrientation` 移到 `shared:common` 模块，消除因共享模型导致的循环依赖
+         - **解决方案2**：创建 `shared:router` 模块，通过 Router 接口模式解耦两个模块（推荐💯）
+         - **技术细节**：
+           - `VideoItem` 移到 `shared/common/src/main/java/com/ucw/beatu/shared/common/model/VideoItem.kt`
+           - 更新所有引用 `VideoItem` 的文件（videofeed、user、landscape 模块）
+           - 创建 `shared:router` 模块，定义 `UserProfileRouter` 和 `VideoItemRouter` 接口
+           - 创建 `RouterRegistry` 单例用于注册和获取 Router 实例
+           - `videofeed:presentation` 实现 `VideoItemRouterImpl`，`user:presentation` 实现 `UserProfileRouterImpl`
+           - 在 `app` 模块的 `BeatUApp.onCreate()` 中注册所有 Router 实现
+           - `VideoItemFragment` 通过 `RouterRegistry.getUserProfileRouter()` 创建 Fragment
+           - `UserWorksViewerAdapter` 和 `UserWorksViewerFragment` 通过 `RouterRegistry.getVideoItemRouter()` 使用 Fragment
+           - 两个模块都只依赖 `shared:router`，不再互相依赖
+         - **优势**：
+           - ✅ 编译时类型安全，不需要反射
+           - ✅ 代码清晰，符合 Clean Architecture 和依赖倒置原则
+           - ✅ 易于维护和测试
+           - ✅ 彻底解决循环依赖问题
+         - **结果**：彻底解决循环依赖，Gradle 构建任务可以正常执行
+    - 技术亮点：
+      - **代码复用**：复用 `UserProfileFragment`，避免重复实现用户信息展示 UI，符合 DRY 原则
+      - **半屏交互**：视频缩小到上半部分，用户信息显示在下半部分，保持视频播放
+      - **平滑动画**：使用 ConstraintSet 和 TransitionManager 实现流畅的布局切换动画
+      - **可配置模式**：通过 `readOnly` 参数控制 Fragment 行为，一处维护，多处复用
+      - **循环依赖解决**：通过共享模型提取和 Router 接口模式，彻底解决模块间循环依赖问题，符合 Clean Architecture 原则
+    - 修改文件：
+      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/model/VideoItem.kt`
+      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/mapper/VideoMapper.kt`
+      - `BeatUClient/business/videofeed/presentation/src/main/res/layout/item_video.xml`
+      - `BeatUClient/business/user/presentation/src/main/java/com/ucw/beatu/business/user/presentation/ui/UserProfileFragment.kt`
+      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/VideoItemFragment.kt`
+      - `BeatUClient/shared/common/src/main/java/com/ucw/beatu/shared/common/model/VideoItem.kt`（新增）
+      - `BeatUClient/business/videofeed/presentation/build.gradle.kts`（移除循环依赖）
+      - `BeatUClient/business/user/presentation/build.gradle.kts`（移除循环依赖）
+
+
+- [x] 完善搜索结果页面的结果显示
+    - 2025-12-04 - done by KJH
     - 方案：
     - 内容：
       - 
 
-
-- [x] 完善搜索结果页面的结果显示
-    - 2025-12-02 - done by KJH
+- [x] 发布器的UI与数据连接
+    - 2025-12-04 - done by KJH
     - 方案：
     - 内容：
-        - 
+      - 
+
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。
 

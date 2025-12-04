@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
+import kotlin.collections.List
 
 /**
  * 本地数据源接口
@@ -77,10 +78,12 @@ class VideoLocalDataSourceImpl @Inject constructor(
     override suspend fun saveVideos(videos: List<Video>) {
         // 前台仅做轻量落库，不阻塞在首帧生成上
         videoDao.insertAll(videos.map { it.toEntity() })
+        enqueueThumbnailGeneration(videos);
     }
 
     override suspend fun saveVideo(video: Video) {
         videoDao.insert(video.toEntity())
+        enqueueThumbnailGeneration(listOf(video))
     }
 
     override suspend fun clearVideos() {
@@ -111,15 +114,29 @@ class VideoLocalDataSourceImpl @Inject constructor(
     override fun enqueueThumbnailGeneration(videos: List<Video>) {
         // 后台懒生成：仅针对当前批次中 coverUrl 为空的条目生成缩略图并更新 DB
         if (videos.isEmpty()) return
+        android.util.Log.d("VideoLocalDataSource", "Enqueueing thumbnail generation for ${videos.size} videos")
         thumbnailScope.launch {
             videos.forEach { video ->
-                if (video.coverUrl.isNotBlank()) return@forEach
+                // 检查 coverUrl 是否为空或空白（包括空字符串、null等）
+                val needsThumbnail = video.coverUrl.isBlank() || video.coverUrl.isEmpty()
+                if (!needsThumbnail) {
+                    android.util.Log.d("VideoLocalDataSource", "Skipping video ${video.id}: coverUrl already exists: ${video.coverUrl}")
+                    return@forEach
+                }
+                android.util.Log.d("VideoLocalDataSource", "Generating thumbnail for video ${video.id}, playUrl: ${video.playUrl}, current coverUrl: '${video.coverUrl}'")
                 val localPath = runCatching {
                     extractFirstFrameToFile(video.id, video.playUrl)
                 }.getOrNull()
                 if (!localPath.isNullOrBlank()) {
                     // 仅更新封面字段，避免重写整行
-                    videoDao.updateCoverUrl(video.id, localPath)
+                    try {
+                        videoDao.updateCoverUrl(video.id, localPath)
+                        android.util.Log.d("VideoLocalDataSource", "Thumbnail generated and saved for video ${video.id}: $localPath")
+                    } catch (e: Exception) {
+                        android.util.Log.e("VideoLocalDataSource", "Failed to update coverUrl in database for video ${video.id}", e)
+                    }
+                } else {
+                    android.util.Log.w("VideoLocalDataSource", "Failed to generate thumbnail for video ${video.id}, playUrl: ${video.playUrl}")
                 }
             }
         }
@@ -131,24 +148,94 @@ class VideoLocalDataSourceImpl @Inject constructor(
     private fun extractFirstFrameToFile(videoId: String, url: String): String? {
         val retriever = MediaMetadataRetriever()
         return try {
-            retriever.setDataSource(url, HashMap())
-            val frame: Bitmap = retriever.getFrameAtTime(
-                100_000L, // 取第 ~0.1s 的关键帧，避免黑帧
-                MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-            ) ?: return null
+            android.util.Log.d("VideoLocalDataSource", "Extracting frame from: $url")
+            
+            // 尝试设置数据源，支持多种方式
+            try {
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    // 对于网络URL，尝试使用 setDataSource(url, headers)
+                    // 某些 Android 版本可能不支持直接从网络URL提取，需要先下载
+                    retriever.setDataSource(url, HashMap())
+                    android.util.Log.d("VideoLocalDataSource", "Set data source from network URL: $url")
+                } else {
+                    // 本地文件路径
+                    retriever.setDataSource(url)
+                    android.util.Log.d("VideoLocalDataSource", "Set data source from local file: $url")
+                }
+            } catch (e: IllegalArgumentException) {
+                android.util.Log.e("VideoLocalDataSource", "Failed to set data source for video $videoId: ${e.message}", e)
+                return null
+            } catch (e: IllegalStateException) {
+                android.util.Log.e("VideoLocalDataSource", "Illegal state when setting data source for video $videoId: ${e.message}", e)
+                return null
+            }
+            
+            // 尝试多个时间点提取首帧，避免黑帧
+            val timePoints = listOf( 500_000L, 1_000_000L) //  0.5s, 1s
+            var frame: Bitmap? = null
+            
+            for (timeUs in timePoints) {
+                try {
+                    frame = retriever.getFrameAtTime(
+                        timeUs,
+                        MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                    )
+                    if (frame != null) {
+                        android.util.Log.d("VideoLocalDataSource", "Successfully extracted frame at ${timeUs / 1000}ms for video $videoId")
+                        break
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("VideoLocalDataSource", "Failed to extract frame at ${timeUs / 1000}ms for video $videoId: ${e.message}")
+                }
+            }
+            
+            if (frame == null) {
+                android.util.Log.w("VideoLocalDataSource", "Failed to extract frame at any time point for video $videoId")
+                return null
+            }
 
             val dir = File(appContext.filesDir, "video_thumbnails").apply {
-                if (!exists()) mkdirs()
+                if (!exists()) {
+                    val created = mkdirs()
+                    android.util.Log.d("VideoLocalDataSource", "Created thumbnail directory: $created, path: ${absolutePath}")
+                }
             }
             val file = File(dir, "${videoId}.jpg")
-            FileOutputStream(file).use { out ->
-                frame.compress(Bitmap.CompressFormat.JPEG, 80, out)
+            
+            // 如果文件已存在，先删除
+            if (file.exists()) {
+                val deleted = file.delete()
+                android.util.Log.d("VideoLocalDataSource", "Deleted existing thumbnail file: $deleted")
             }
+            
+            FileOutputStream(file).use { out ->
+                val compressed = frame.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                if (!compressed) {
+                    android.util.Log.e("VideoLocalDataSource", "Failed to compress bitmap for video $videoId")
+                    return null
+                }
+                out.flush()
+                android.util.Log.d("VideoLocalDataSource", "Compressed bitmap: $compressed, file size: ${file.length()} bytes")
+            }
+            
+            // 验证文件是否成功创建
+            if (!file.exists() || file.length() == 0L) {
+                android.util.Log.e("VideoLocalDataSource", "Thumbnail file not created or empty for video $videoId")
+                return null
+            }
+            
+            android.util.Log.d("VideoLocalDataSource", "Thumbnail saved successfully: ${file.absolutePath}, size: ${file.length()} bytes")
             file.absolutePath
         } catch (e: Exception) {
+            android.util.Log.e("VideoLocalDataSource", "Error extracting frame for video $videoId from $url", e)
+            e.printStackTrace()
             null
         } finally {
-            retriever.release()
+            try {
+                retriever.release()
+            } catch (e: Exception) {
+                android.util.Log.e("VideoLocalDataSource", "Error releasing MediaMetadataRetriever", e)
+            }
         }
     }
 }

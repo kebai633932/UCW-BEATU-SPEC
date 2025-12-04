@@ -17,16 +17,18 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.ucw.beatu.business.user.presentation.R
 import com.ucw.beatu.business.user.presentation.ui.adapter.UserWorksViewerAdapter
 import com.ucw.beatu.business.user.presentation.viewmodel.UserWorksViewerViewModel
-import com.ucw.beatu.business.videofeed.presentation.model.VideoItem
-import com.ucw.beatu.business.videofeed.presentation.ui.VideoItemFragment
+
+import com.ucw.beatu.shared.common.model.VideoItem
+import com.ucw.beatu.shared.router.UserWorksViewerRouter
+import com.ucw.beatu.shared.router.RouterRegistry
 import dagger.hilt.android.AndroidEntryPoint
+import android.util.Log
 import kotlin.math.max
-import kotlin.math.min
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
-class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer) {
-
+class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), UserWorksViewerRouter {
+    private val TAG = javaClass.simpleName
     private val viewModel: UserWorksViewerViewModel by viewModels()
 
     private var viewPager: ViewPager2? = null
@@ -52,13 +54,52 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer) {
         setupViewPager(view)
         parseArgumentsIfNeeded(requireArguments())
         collectUiState()
+        // 注册 Router，供子 Fragment 使用
+        RouterRegistry.registerUserWorksViewerRouter(this)
     }
-
+    
     override fun onDestroyView() {
         super.onDestroyView()
         viewPager?.unregisterOnPageChangeCallback(pageChangeCallback)
         viewPager = null
         adapter = null
+        // 取消注册 Router
+        RouterRegistry.registerUserWorksViewerRouter(null)
+    }
+    
+    // UserWorksViewerRouter 接口实现
+    override fun switchToVideo(index: Int): Boolean {
+        val adapter = this.adapter
+        val pager = this.viewPager
+        if (adapter == null || pager == null) {
+            Log.w(TAG, "Cannot switch video: adapter or viewPager is null")
+            return false
+        }
+        
+        val itemCount = adapter.itemCount
+        if (itemCount == 0) {
+            Log.w(TAG, "Cannot switch video: video list is empty")
+            return false
+        }
+        
+        val boundedIndex = index.coerceIn(0, itemCount - 1)
+        val currentIndex = pager.currentItem
+        
+        // 如果目标索引与当前索引相同，不需要切换
+        if (currentIndex == boundedIndex) {
+            Log.d(TAG, "Already at video index $boundedIndex, no need to switch")
+            return true
+        }
+        
+        // 直接切换 ViewPager2，使用平滑滚动
+        // 这会触发 pageChangeCallback，进而更新 ViewModel 的 currentIndex
+        pager.setCurrentItem(boundedIndex, true)
+        Log.d(TAG, "Switched to video at index $boundedIndex (from $currentIndex)")
+        return true
+    }
+    
+    override fun getCurrentUserId(): String? {
+        return viewModel.uiState.value.userId.takeIf { it.isNotEmpty() }
     }
 
     private fun setupToolbar(root: View) {
@@ -80,10 +121,22 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer) {
     }
 
     private fun parseArgumentsIfNeeded(bundle: Bundle) {
-        val userId = bundle.getString(ARG_USER_ID) ?: return
+        val userId = bundle.getString(ARG_USER_ID)
         val initialIndex = bundle.getInt(ARG_INITIAL_INDEX, 0)
         val videos = BundleCompat.getParcelableArrayList(bundle, ARG_VIDEO_LIST, VideoItem::class.java)
             ?: arrayListOf()
+
+        Log.d(TAG, "parseArgumentsIfNeeded: userId=$userId, initialIndex=$initialIndex, videoListSize=${videos.size}")
+
+        videos.forEachIndexed { index, video ->
+            Log.d(TAG, "Video[$index]: id=${video.id}, likeCount=${video.likeCount}")
+        }
+
+        if (userId.isNullOrEmpty()) {
+            Log.e(TAG, "parseArgumentsIfNeeded: userId is null or empty, skip init")
+            return
+        }
+
         viewModel.setInitialData(userId, videos, initialIndex)
     }
 
@@ -91,16 +144,27 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer) {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
-                    adapter?.submitList(state.videoList)
+                    Log.d(TAG, "collectUiState: videoListSize=${state.videoList.size}, currentIndex=${state.currentIndex}")
+
                     if (state.videoList.isEmpty()) {
-                        return@collect
+                        Log.w(TAG, "collectUiState: video list is empty, nothing to show")
                     }
-                    val desiredIndex = state.currentIndex.coerceIn(0, max(state.videoList.lastIndex, 0))
-                    val current = viewPager?.currentItem ?: -1
-                    if (current != desiredIndex) {
-                        viewPager?.setCurrentItem(desiredIndex, false)
+
+                    state.videoList.forEachIndexed { index, video ->
+                        Log.d(TAG, "UI State Video[$index]: id=${video.id}, likeCount=${video.likeCount}")
                     }
-                    handlePageSelected(desiredIndex)
+
+                    // 延迟提交列表，避免 RecyclerView 崩溃
+                    viewPager?.post {
+                        adapter?.submitList(state.videoList.toList()) // 提交新列表副本更安全
+
+                        val desiredIndex = state.currentIndex.coerceIn(0, max(state.videoList.lastIndex, 0))
+                        val current = viewPager?.currentItem ?: -1
+                        if (current != desiredIndex) {
+                            viewPager?.setCurrentItem(desiredIndex, false)
+                        }
+                        handlePageSelected(desiredIndex)
+                    }
                 }
             }
         }
@@ -108,18 +172,21 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer) {
 
     private fun handlePageSelected(position: Int) {
         val fragmentTag = "f$position"
-        val currentFragment =
-            childFragmentManager.findFragmentByTag(fragmentTag) as? VideoItemFragment
+        val currentFragment = childFragmentManager.findFragmentByTag(fragmentTag)
 
-        childFragmentManager.fragments
-            .filterIsInstance<VideoItemFragment>()
-            .forEach { fragment ->
+        // 使用 Router 接口调用 VideoItemFragment 的方法，避免编译时直接依赖
+        val router = RouterRegistry.getVideoItemRouter()
+        if (router != null) {
+            childFragmentManager.fragments.forEach { fragment ->
                 if (fragment == currentFragment && fragment.isVisible) {
-                    fragment.checkVisibilityAndPlay()
+                    router.checkVisibilityAndPlay(fragment)
                 } else {
-                    fragment.onParentVisibilityChanged(false)
+                    router.onParentVisibilityChanged(fragment, false)
                 }
             }
+        } else {
+            Log.e("UserWorksViewerFragment", "VideoItemRouter not registered")
+        }
     }
 
     companion object {
