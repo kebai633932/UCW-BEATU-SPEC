@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from core.config import settings
 from routes.ai import router as ai_router
+from routes.mcp import router as mcp_router
 from routes.metrics import router as metrics_router
 from routes.users import router as user_router
 from routes.videos import router as video_router
@@ -16,6 +17,7 @@ def create_app() -> FastAPI:
     app.include_router(video_router, prefix=api_prefix)
     app.include_router(user_router, prefix=api_prefix)
     app.include_router(ai_router, prefix=api_prefix)
+    app.include_router(mcp_router, prefix=api_prefix)
     app.include_router(metrics_router, prefix=api_prefix)
 
     return app

@@ -43,6 +43,10 @@ DATABASE_URL=mysql+pymysql://jeecg:haomo123@192.168.1.206:3306/jeecg-boot3
 | `DATABASE_URL` | 数据库连接URL | mysql+pymysql://jeecg:haomo123@192.168.1.206:3306/jeecg-boot3 | mysql+pymysql://user:pass@host:port/db |
 | `REDIS_URL` | Redis连接URL | redis://localhost:6379/0 | redis://host:port/db |
 | `API_KEY` | API密钥 | dev-key | - |
+| `MCP_API_KEY` | MCP LLM API Key（用于 AgentMCP） | 空 | 你的 LLM API Key |
+| `MCP_BASE_URL` | MCP LLM Base URL | https://dashscope.aliyuncs.com/compatible-mode/v1 | LLM 服务地址 |
+| `MCP_MODEL` | MCP LLM Model | qwen-flash | 模型名称 |
+| `MCP_REGISTRY_PATH` | MCP 注册表路径 | 空（默认使用 BeatUBackend/mcp_registry） | 自定义路径 |
 
 ### 4. 配置优先级
 

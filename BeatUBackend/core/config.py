@@ -2,7 +2,14 @@ from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import BaseSettings, Field
+from pydantic import Field
+
+# 兼容 Pydantic v1 和 v2
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Pydantic v1
+    from pydantic import BaseSettings
 
 # 加载 .env 文件（如果存在）
 # 优先查找项目根目录下的 .env 文件
@@ -47,10 +54,31 @@ class Settings(BaseSettings):
     # 默认用户配置
     default_user_id: str = Field(default="demo-user", description="默认用户ID")
     default_user_name: str = Field(default="BeatU 用户", description="默认用户名")
+    
+    # MCP 配置（AgentMCP 相关）
+    mcp_api_key: str = Field(
+        default="",
+        description="MCP LLM API Key（用于 AgentMCP，对应环境变量 API_KEY）"
+    )
+    mcp_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        description="MCP LLM Base URL（用于 AgentMCP，对应环境变量 BASE_URL）"
+    )
+    mcp_model: str = Field(
+        default="qwen-flash",
+        description="MCP LLM Model（用于 AgentMCP，对应环境变量 MODEL）"
+    )
+    mcp_registry_path: str = Field(
+        default="",
+        description="MCP 注册表路径（默认为 BeatUBackend/mcp_registry）"
+    )
 
+    # 兼容 Pydantic v1 和 v2
     class Config:
         env_file_encoding = "utf-8"
         case_sensitive = False
+        # Pydantic v2 兼容
+        extra = "ignore"
 
 
 @lru_cache(maxsize=1)
