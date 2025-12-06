@@ -67,20 +67,4 @@
 
     </androidx.core.widget.NestedScrollView>
 
-    <!-- ★★★ 悬浮 AI 按钮 - 右下偏中 ★★★ -->
-    <ImageView
-        android:id="@+id/btn_ai"
-        android:layout_width="62dp"
-        android:layout_height="58dp"
-        android:layout_marginEnd="24dp"
-        android:layout_marginBottom="176dp"
-        android:clickable="true"
-        android:contentDescription="AI 搜索"
-        android:focusable="true"
-        android:foreground="?attr/selectableItemBackgroundBorderless"
-        android:padding="14dp"
-        android:src="@drawable/ai"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
 </androidx.constraintlayout.widget.ConstraintLayout>

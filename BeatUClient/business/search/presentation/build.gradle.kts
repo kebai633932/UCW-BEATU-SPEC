@@ -43,6 +43,7 @@ android {
 dependencies {
     // Business Domain
     implementation(project(":business:search:domain"))
+    implementation(project(":business:search:data"))        // AISearchRepository
     implementation(project(":business:videofeed:domain")) // GetFeedUseCase / Video
     implementation(project(":business:videofeed:data"))   // VideoRepository 实现与 Hilt 绑定
     

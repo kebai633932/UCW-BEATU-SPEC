@@ -19,7 +19,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import android.widget.ProgressBar
 import com.ucw.beatu.business.search.presentation.R
+import com.ucw.beatu.business.search.presentation.viewmodel.AISearchViewModel
+import com.ucw.beatu.business.search.presentation.viewmodel.AISearchUiState
 import com.ucw.beatu.business.search.presentation.viewmodel.SearchResultVideoViewModel
 import com.ucw.beatu.shared.common.navigation.NavigationHelper
 import com.ucw.beatu.shared.common.navigation.NavigationIds
@@ -39,9 +42,16 @@ class SearchResultFragment : Fragment() {
     private lateinit var searchButton: TextView
     private lateinit var backButton: View
     private val viewModel: SearchResultVideoViewModel by viewModels()
+    private val aiSearchViewModel: AISearchViewModel by viewModels()
 
     private lateinit var resultAdapter: SearchResultListAdapter
     private var currentQuery: String = ""
+    
+    // AI搜索相关UI
+    private lateinit var aiSearchContainer: View
+    private lateinit var aiAnswerText: TextView
+    private lateinit var aiLoadingProgress: ProgressBar
+    private lateinit var aiErrorText: TextView
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -55,9 +65,15 @@ class SearchResultFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         currentQuery = arguments?.getString(ARG_QUERY).orEmpty()
         setupSearchHeader(view)
+        setupAISearchResult(view)
         setupResultList(view)
         observeViewModel()
+        observeAISearchViewModel()
         viewModel.initSearch(currentQuery, titleKeyword = "")
+        // 触发AI搜索
+        if (currentQuery.isNotEmpty()) {
+            aiSearchViewModel.search(currentQuery)
+        }
     }
 
     private fun setupSearchHeader(view: View) {
@@ -104,6 +120,13 @@ class SearchResultFragment : Fragment() {
         }
     }
 
+    private fun setupAISearchResult(view: View) {
+        aiSearchContainer = view.findViewById(R.id.ai_search_result_container)
+        aiAnswerText = view.findViewById(R.id.tv_ai_answer)
+        aiLoadingProgress = view.findViewById(R.id.pb_ai_loading)
+        aiErrorText = view.findViewById(R.id.tv_ai_error)
+    }
+
     private fun setupResultList(view: View) {
         val rvResults = view.findViewById<RecyclerView>(R.id.rv_search_result_list)
         rvResults.layoutManager = LinearLayoutManager(requireContext())
@@ -117,6 +140,8 @@ class SearchResultFragment : Fragment() {
         if (query.isBlank()) return
         currentQuery = query
         viewModel.initSearch(query, titleKeyword = "")
+        // 触发AI搜索
+        aiSearchViewModel.search(query)
     }
 
     private fun observeViewModel() {
@@ -129,6 +154,48 @@ class SearchResultFragment : Fragment() {
                     }
                     // 省略 loading/error 展示，后续可扩展
                 }
+            }
+        }
+    }
+
+    private fun observeAISearchViewModel() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                aiSearchViewModel.uiState.collect { state ->
+                    updateAISearchUI(state)
+                }
+            }
+        }
+    }
+
+    private fun updateAISearchUI(state: AISearchUiState) {
+        when {
+            state.isLoading -> {
+                // 显示加载状态
+                aiSearchContainer.isVisible = true
+                aiLoadingProgress.isVisible = true
+                aiAnswerText.isVisible = false
+                aiErrorText.isVisible = false
+            }
+            state.error != null -> {
+                // 显示错误
+                aiSearchContainer.isVisible = true
+                aiLoadingProgress.isVisible = false
+                aiAnswerText.isVisible = false
+                aiErrorText.isVisible = true
+                aiErrorText.text = state.error
+            }
+            state.aiAnswer.isNotEmpty() -> {
+                // 显示AI回答（流式文本）
+                aiSearchContainer.isVisible = true
+                aiLoadingProgress.isVisible = false
+                aiAnswerText.isVisible = true
+                aiErrorText.isVisible = false
+                aiAnswerText.text = state.aiAnswer
+            }
+            else -> {
+                // 隐藏AI搜索区域
+                aiSearchContainer.isVisible = false
             }
         }
     }

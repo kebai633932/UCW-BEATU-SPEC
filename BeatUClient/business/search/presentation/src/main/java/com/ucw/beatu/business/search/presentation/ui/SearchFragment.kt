@@ -33,7 +33,6 @@ class SearchFragment : Fragment() {
     private lateinit var scrollBeforeSearch: View
     private lateinit var llHotSearch: FlowLayout
     private lateinit var rvSearchSuggestions: RecyclerView
-    private lateinit var aiButton: View
     
     private lateinit var searchSuggestionAdapter: SearchSuggestionAdapter
 
@@ -61,10 +60,6 @@ class SearchFragment : Fragment() {
         initSearchSuggestions()
         initSearchBox(view)
         initHotSearch()
-        aiButton.setOnClickListener {
-            val prompt = searchEditText.text?.toString()?.trim().orEmpty()
-            navigateToAiSearch(prompt.takeIf { it.isNotBlank() })
-        }
     }
 
     /**
@@ -78,7 +73,6 @@ class SearchFragment : Fragment() {
         scrollBeforeSearch = view.findViewById(R.id.scroll_before_search)
         llHotSearch = view.findViewById(R.id.ll_hot_search)
         rvSearchSuggestions = view.findViewById(R.id.rv_search_suggestions)
-        aiButton = view.findViewById(R.id.btn_ai)
         clearButton.isVisible = searchEditText.text?.isNotEmpty() == true
     }
 
@@ -241,31 +235,6 @@ class SearchFragment : Fragment() {
         }
     }
 
-    /**
-     * 跳转至 AI 搜索或带初始提问
-     */
-    private fun navigateToAiSearch(initialPrompt: String? = null) {
-        val args = initialPrompt?.let { bundleOf("ai_query" to it) }
-        runCatching {
-            val navController = findNavController()
-            val context = requireContext()
-            val actionId = NavigationHelper.getResourceId(
-                context,
-                NavigationIds.ACTION_SEARCH_TO_AI_SEARCH
-            )
-            if (actionId != 0) {
-                if (args != null) {
-                    navController.navigate(actionId, args)
-                } else {
-                    navController.navigate(actionId)
-                }
-            } else {
-                navController.navigateUp()
-            }
-        }.onFailure {
-            findNavController().navigateUp()
-        }
-    }
 
     /**
      * 切换搜索状态

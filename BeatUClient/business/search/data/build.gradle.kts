@@ -46,6 +46,13 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.moshi)
     
+    // Moshi (for direct JSON parsing in AISearchApiService)
+    implementation(libs.moshi)
+    implementation(libs.moshi.kotlin)
+    
+    // OkHttp (for SSE streaming)
+    implementation(libs.okhttp)
+    
     // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
