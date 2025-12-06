@@ -27,82 +27,25 @@
         android:layout_gravity="bottom"
         android:background="@android:color/transparent">
 
-        <!-- 绿色层：集数 / 合集 / 标题 -->
+        <!-- 绿色层：标题 -->
         <LinearLayout
             android:id="@+id/layout_top_info"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 1. 集数信息 + 全屏按钮 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-
-                <TextView
-                    android:id="@+id/tv_episode_info"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="1/3集"
-                    android:textSize="18sp"
-                    android:textColor="#FFFFEB3B"
-                    android:textStyle="bold" />
-
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
-                <ImageView
-                    android:id="@+id/iv_fullscreen"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/selector_fullscreen"
-                    android:tint="#FFFFFFFF"
-                    android:contentDescription="全屏"
-                    android:clickable="true"
-                    android:focusable="true" />
-            </LinearLayout>
-
-            <!-- 2. 合集信息 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="8dp">
-
-                <ImageView
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
-                    android:src="@drawable/selector_play_button"
-                    android:tint="#FF2196F3"
-                    android:contentDescription="合集" />
-
-                <TextView
-                    android:id="@+id/tv_collection_info"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="合集:切腹 共2集"
-                    android:textSize="14sp"
-                    android:textColor="#FF2196F3"
-                    android:layout_marginStart="4dp" />
-            </LinearLayout>
-
-            <!-- 3. 视频标题 -->
+            <!-- 视频标题 -->
             <TextView
                 android:id="@+id/tv_video_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="《切腹》1/2上集:浪人为何要用竹刀这般折磨自己?# 影视解说#动作冒险"
+                android:text=""
                 android:textSize="14sp"
                 android:textColor="#FFFFFFFF"
                 android:maxLines="2"
                 android:ellipsize="end"
-                android:layout_marginBottom="8dp" />
+                android:layout_marginTop="20dp"
+                 />
         </LinearLayout>
 
         <!-- 红色层：进度条容器（位于绿色层和蓝色层之间） -->

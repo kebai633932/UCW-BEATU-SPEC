@@ -98,11 +98,8 @@ class VideoItemFragment : BaseFeedItemFragment() {
         playerView = view.findViewById(R.id.player_view)
         imagePager = view.findViewById(R.id.image_pager)
          controlsView = view.findViewById(R.id.video_controls)
-         // 注意：全屏按钮及标题/频道名称等现在定义在 shared:designsystem 的 VideoControlsView 布局中
+         // 注意：标题/频道名称等现在定义在 shared:designsystem 的 VideoControlsView 布局中
          val sharedControlsRoot = controlsView
-        val fullScreenButton = sharedControlsRoot?.findViewById<View>(
-            com.ucw.beatu.shared.designsystem.R.id.iv_fullscreen
-        )
 
         videoItem?.let { item ->
             // 通过 VideoControlsView 内部的 TextView 展示标题与频道名称
@@ -172,14 +169,10 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 playerView?.visibility = View.GONE
                 imagePager?.visibility = View.VISIBLE
                 setupImagePager(item.imageUrls)
-                // 图文内容不支持横屏全屏按钮
-                fullScreenButton?.visibility = View.GONE
             } else {
                 // 视频内容：显示播放器，隐藏图文容器
                 playerView?.visibility = View.VISIBLE
                 imagePager?.visibility = View.GONE
-                // 所有视频都显示横屏按钮，允许用户切换到横屏播放
-                fullScreenButton?.visibility = View.VISIBLE
             }
         }
 
@@ -275,7 +268,6 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 viewModel.seekTo(positionMs)
             }
         }
-        fullScreenButton?.setOnClickListener { openLandscapeMode() }
 
         // A：点视频区域 = 播放/暂停切换（仅视频内容生效）
         // 如果用户信息覆盖层可见，点击视频区域则关闭覆盖层；否则切换播放/暂停
@@ -538,7 +530,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
         // 根据当前导航目的地选择正确的action
         val currentDestId = navController.currentDestination?.id
         val userWorksViewerDestId = NavigationHelper.getResourceId(requireContext(), NavigationIds.USER_WORKS_VIEWER)
-        
+
         val actionId = if (currentDestId == userWorksViewerDestId) {
             // 从用户作品观看页面导航到横屏
             NavigationHelper.getResourceId(requireContext(), NavigationIds.ACTION_USER_WORKS_VIEWER_TO_LANDSCAPE)
@@ -546,7 +538,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
             // 从Feed页面导航到横屏（默认）
             NavigationHelper.getResourceId(requireContext(), NavigationIds.ACTION_FEED_TO_LANDSCAPE)
         }
-        
+
         if (actionId == 0) {
             Log.e(TAG, "Navigation action not found: currentDestId=$currentDestId, userWorksViewerDestId=$userWorksViewerDestId")
             return
@@ -562,7 +554,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
             Log.d(TAG, "openLandscapeMode: from feed or other page, no video list restriction")
             null
         }
-        
+
         val currentIndex = if (currentDestId == userWorksViewerDestId) {
             val router = RouterRegistry.getUserWorksViewerRouter()
             val index = router?.getCurrentVideoIndex() ?: 0
