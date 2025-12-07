@@ -10,6 +10,7 @@ import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.ui.PlayerView
@@ -72,6 +73,10 @@ class VideoItemFragment : BaseFeedItemFragment() {
     private var isUserInfoVisible = false
     private var userProfileFragment: Fragment? = null
     private var userProfileDialogFragment: UserProfileDialogFragment? = null
+    
+    // 全屏按钮相关
+    private var fullScreenButton: android.widget.ImageView? = null
+    private var lastFullScreenClickTime: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -100,6 +105,9 @@ class VideoItemFragment : BaseFeedItemFragment() {
          controlsView = view.findViewById(R.id.video_controls)
          // 注意：标题/频道名称等现在定义在 shared:designsystem 的 VideoControlsView 布局中
          val sharedControlsRoot = controlsView
+         
+         // 获取全屏按钮
+         fullScreenButton = sharedControlsRoot?.findViewById(com.ucw.beatu.shared.designsystem.R.id.iv_fullscreen)
 
         videoItem?.let { item ->
             // 通过 VideoControlsView 内部的 TextView 展示标题与频道名称
@@ -115,11 +123,38 @@ class VideoItemFragment : BaseFeedItemFragment() {
             val channelAvatarView = sharedControlsRoot?.findViewById<android.widget.ImageView>(
                 com.ucw.beatu.shared.designsystem.R.id.iv_channel_avatar
             )
+            // 设置圆形裁剪
+            channelAvatarView?.apply {
+                outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+                clipToOutline = true
+            }
             val placeholderRes = com.ucw.beatu.shared.designsystem.R.drawable.ic_avatar_placeholder
             val authorAvatarUrl = item.authorAvatar
+            
+            // 尝试获取数据来源（通过 parentFragment 获取 RecommendViewModel）
+            val videoSource = try {
+                val parent = parentFragment
+                if (parent is com.ucw.beatu.business.videofeed.presentation.ui.RecommendFragment) {
+                    val recommendViewModel = ViewModelProvider(parent)[
+                        com.ucw.beatu.business.videofeed.presentation.viewmodel.RecommendViewModel::class.java
+                    ]
+                    recommendViewModel.getVideoSource(item.id)
+                } else {
+                    "unknown"
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "onViewCreated: 无法获取数据来源，${e.message}")
+                "unknown"
+            }
+            
+            // 打印作者头像和数据来源信息
+            Log.d(TAG, "onViewCreated: 视频ID=${item.id}, 标题=${item.title}, 数据来源=$videoSource, authorAvatar=${authorAvatarUrl ?: "null"}, authorName=${item.authorName}")
+            
             if (authorAvatarUrl.isNullOrBlank()) {
+                Log.w(TAG, "onViewCreated: 作者头像为空，使用占位图，视频ID=${item.id}, 数据来源=$videoSource")
                 channelAvatarView?.setImageResource(placeholderRes)
             } else {
+                Log.d(TAG, "onViewCreated: 加载作者头像，视频ID=${item.id}, authorAvatar=$authorAvatarUrl, 数据来源=$videoSource")
                 channelAvatarView?.load(authorAvatarUrl) {
                     crossfade(true)
                     placeholder(placeholderRes)
@@ -161,7 +196,6 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 favoriteCount = item.favoriteCount.toLong()
             )
 
-            val isLandscapeVideo = item.orientation == VideoOrientation.LANDSCAPE
             val isImagePost = item.type == FeedContentType.IMAGE_POST
 
             // 图文内容：隐藏视频播放器，显示图片轮播；保留统一的底部交互区
@@ -173,7 +207,14 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 // 视频内容：显示播放器，隐藏图文容器
                 playerView?.visibility = View.VISIBLE
                 imagePager?.visibility = View.GONE
+                // 所有视频内容都显示横屏按钮
+                fullScreenButton?.visibility = View.VISIBLE
             }
+        }
+        
+        // 设置横屏按钮点击监听（所有视频内容都支持横屏）
+        fullScreenButton?.setOnClickListener {
+            handleFullScreenButtonClick()
         }
 
         observeViewModel()
@@ -475,7 +516,23 @@ class VideoItemFragment : BaseFeedItemFragment() {
             Log.d(TAG, "preparePlayerForFirstTime: skip for image post ${item.id}")
             return
         }
-        Log.d(TAG, "Preparing video for playback: ${item.id}")
+        
+        // 获取数据来源
+        val videoSource = try {
+            val parent = parentFragment
+            if (parent is com.ucw.beatu.business.videofeed.presentation.ui.RecommendFragment) {
+                val recommendViewModel = ViewModelProvider(parent)[
+                    com.ucw.beatu.business.videofeed.presentation.viewmodel.RecommendViewModel::class.java
+                ]
+                recommendViewModel.getVideoSource(item.id)
+            } else {
+                "unknown"
+            }
+        } catch (e: Exception) {
+            "unknown"
+        }
+        
+        Log.d(TAG, "preparePlayerForFirstTime: 准备播放视频，视频ID=${item.id}, 视频URL=${item.videoUrl}, 数据来源=$videoSource, authorAvatar=${item.authorAvatar ?: "null"}")
         viewModel.playVideo(item.id, item.videoUrl)
         viewModel.preparePlayer(item.id, item.videoUrl, pv)
         hasPreparedPlayer = true
@@ -520,6 +577,41 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 Log.w(TAG, "reattachPlayer: Fragment not added after post")
             }
         }
+    }
+
+    /**
+     * 处理横屏按钮点击事件
+     * 添加防抖处理和状态检查
+     */
+    private fun handleFullScreenButtonClick() {
+        // 防抖处理：500ms内只响应一次点击
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastFullScreenClickTime < 500) {
+            Log.d(TAG, "handleFullScreenButtonClick: 点击过快，忽略")
+            return
+        }
+        lastFullScreenClickTime = currentTime
+
+        // 检查是否正在导航中
+        if (navigatingToLandscape) {
+            Log.d(TAG, "handleFullScreenButtonClick: 正在导航中，忽略")
+            return
+        }
+
+        // 检查视频项是否有效
+        val item = videoItem ?: run {
+            Log.e(TAG, "handleFullScreenButtonClick: videoItem is null")
+            return
+        }
+
+        // 检查是否为图文内容
+        if (item.type == FeedContentType.IMAGE_POST) {
+            Log.d(TAG, "handleFullScreenButtonClick: 图文内容不支持横屏")
+            return
+        }
+
+        // 执行横屏切换（所有视频内容都支持横屏）
+        openLandscapeMode()
     }
 
     fun openLandscapeMode() {
