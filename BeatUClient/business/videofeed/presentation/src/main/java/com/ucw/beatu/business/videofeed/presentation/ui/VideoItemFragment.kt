@@ -66,6 +66,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
     private var hasPreparedPlayer = false
     private var imageAutoScrollJob: Job? = null
     private var isRestoringFromLandscape = false
+    private var isRestoringFromUserWorksViewer = false
 
     // 用户信息展示相关
     private var userInfoOverlay: View? = null
@@ -359,9 +360,9 @@ class VideoItemFragment : BaseFeedItemFragment() {
         } else {
             val itemId = item?.id
             if (itemId != null) {
-                // 如果正在从横屏恢复，跳过 onStart 的逻辑，让 restorePlayerFromLandscape 处理
-                if (isRestoringFromLandscape) {
-                    Log.d(TAG, "onStart: 正在从横屏恢复，跳过，等待 restorePlayerFromLandscape 处理")
+                // 如果正在从横屏恢复或从用户弹窗返回，跳过 onStart 的逻辑，让恢复方法处理
+                if (isRestoringFromLandscape || isRestoringFromUserWorksViewer) {
+                    Log.d(TAG, "onStart: 正在从横屏恢复或从用户弹窗返回，跳过，等待恢复方法处理")
                     return
                 }
                 
@@ -723,6 +724,63 @@ class VideoItemFragment : BaseFeedItemFragment() {
         }
     }
 
+    /**
+     * 从用户弹窗返回后恢复播放器
+     * 由于是popBackStack，生命周期函数不会触发，需要手动调用此方法
+     * 使用与 restorePlayerFromLandscape() 相同的逻辑
+     */
+    fun restorePlayerFromUserWorksViewer() {
+        if (!isAdded || videoItem == null) {
+            Log.w(TAG, "restorePlayerFromUserWorksViewer: Fragment not ready, skip")
+            return
+        }
+        
+        val item = videoItem ?: return
+        if (item.type == FeedContentType.IMAGE_POST) {
+            // 图文内容不支持此恢复逻辑
+            Log.d(TAG, "restorePlayerFromUserWorksViewer: skip for image post ${item.id}")
+            return
+        }
+        
+        val pv = playerView ?: run {
+            Log.w(TAG, "restorePlayerFromUserWorksViewer: playerView is null, skip")
+            return
+        }
+        
+        Log.d(TAG, "restorePlayerFromUserWorksViewer: 恢复播放器，videoId=${item.id}")
+        
+        // 设置标志，防止 onStart 重复处理
+        isRestoringFromUserWorksViewer = true
+
+        // 先设置currentVideoId，确保onHostResume能正确获取会话信息
+        // 注意：必须先调用playVideo设置currentVideoId，否则onHostResume会返回
+        viewModel.playVideo(item.id, item.videoUrl)
+
+        // 优化：使用post延迟执行，确保View已经布局完成，减少卡顿
+        pv.post {
+            if (!isAdded) {
+                Log.w(TAG, "restorePlayerFromUserWorksViewer: Fragment not added after post")
+                isRestoringFromUserWorksViewer = false
+                return@post
+            }
+            
+            // 使用onHostResume方法，它会检查是否有播放会话并恢复
+            // onHostResume会从PlaybackSessionStore中获取会话信息，并绑定播放器到view
+            viewModel.onHostResume(pv)
+            hasPreparedPlayer = true
+            Log.d(TAG, "restorePlayerFromUserWorksViewer: 播放器已恢复，playerView.player=${pv.player}")
+            
+            // 优化：延迟恢复播放，让UI先渲染完成
+            pv.postDelayed({
+                if (isAdded && isViewVisibleOnScreen()) {
+                    viewModel.resume()
+                }
+                // 恢复完成后，重置标志
+                isRestoringFromUserWorksViewer = false
+            }, 50) // 延迟50ms，让UI先渲染
+        }
+    }
+
     private fun findParentNavController(): NavController? {
         return runCatching { parentFragment?.findNavController() ?: findNavController() }.getOrNull()
     }
@@ -952,6 +1010,17 @@ class VideoItemFragment : BaseFeedItemFragment() {
             } else {
                 // 不同用户，允许导航到新用户的作品列表
                 Log.d(TAG, "Already in user works viewer but different user (current: $currentUserId, target: $userId), allowing navigation")
+            }
+        }
+
+        // ✅ 修复：在导航到用户弹窗前，先保存播放会话，确保返回时能恢复
+        // 使用与横屏切换相同的逻辑
+        if (hasPreparedPlayer && videoItem?.type != FeedContentType.IMAGE_POST) {
+            Log.d(TAG, "navigateToUserWorksViewer: 保存播放会话，videoId=${videoItem?.id}")
+            viewModel.persistPlaybackSession()
+            // 解绑播放器，但不释放（保持播放器在池中）
+            viewModel.mediaPlayer()?.let { player ->
+                PlayerView.switchTargetView(player, playerView, null)
             }
         }
 

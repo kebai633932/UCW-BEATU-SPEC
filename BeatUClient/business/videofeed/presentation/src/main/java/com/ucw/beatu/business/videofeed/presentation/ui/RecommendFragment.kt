@@ -53,6 +53,7 @@ class RecommendFragment : Fragment() {
     private var isLandscapeMode = false // 标记是否已经切换到横屏模式
     private var lastOrientationCheckTime = 0L // 防抖：记录上次检查时间
     private val ORIENTATION_CHECK_THROTTLE_MS = 300L // 防抖间隔：300ms
+    private var previousDestinationId: Int? = null // 记录之前的导航目标，用于检测返回
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -411,6 +412,27 @@ class RecommendFragment : Fragment() {
     }
     
     /**
+     * 从用户弹窗返回后恢复播放器
+     * 使用与 restorePlayerFromLandscape() 相同的逻辑
+     */
+    private fun restorePlayerFromUserWorksViewer() {
+        val currentPosition = viewPager?.currentItem ?: -1
+        if (currentPosition >= 0) {
+            val currentFragmentTag = "f$currentPosition"
+            val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
+            
+            // 确保获取的是真正可见的Fragment
+            if (currentFragment is VideoItemFragment && currentFragment.isVisible) {
+                Log.d(TAG, "从用户弹窗返回，恢复当前可见的VideoItemFragment播放器，position=$currentPosition")
+                // 获取当前可见的playerview，将播放器绑定到view然后播放
+                currentFragment.restorePlayerFromUserWorksViewer()
+            } else {
+                Log.w(TAG, "restorePlayerFromUserWorksViewer: 未找到可见的VideoItemFragment，currentPosition=$currentPosition, fragment=$currentFragment, isVisible=${currentFragment?.isVisible}")
+            }
+        }
+    }
+    
+    /**
      * 通知进入横屏模式（供 VideoItemFragment 调用，确保按钮横屏和自然横屏逻辑一致）
      */
     fun notifyEnterLandscapeMode() {
@@ -435,20 +457,42 @@ class RecommendFragment : Fragment() {
     }
     
     /**
-     * 设置导航监听，监听从landscape返回
+     * 设置导航监听，监听从landscape返回和从用户弹窗返回
      */
     private fun setupNavigationListener() {
-        findNavController().addOnDestinationChangedListener { _, destination, _ ->
-            // 当从landscape返回到feed时，恢复播放器
+        val navController = findNavController()
+        
+        // 初始化 previousDestinationId 为当前的目标
+        previousDestinationId = navController.currentDestination?.id
+        
+        navController.addOnDestinationChangedListener { _, destination, _ ->
             val feedDestinationId = NavigationHelper.getResourceId(
                 requireContext(),
                 NavigationIds.FEED
             )
+            val userWorksViewerDestinationId = NavigationHelper.getResourceId(
+                requireContext(),
+                NavigationIds.USER_WORKS_VIEWER
+            )
+            
+            // 当从landscape返回到feed时，恢复播放器
             if (destination.id == feedDestinationId && isLandscapeMode) {
                 Log.d(TAG, "从landscape返回到feed，恢复播放器")
                 // 使用统一的退出横屏逻辑
                 notifyExitLandscapeMode()
             }
+            
+            // ✅ 修复：当从用户弹窗（USER_WORKS_VIEWER）返回到feed时，恢复播放器
+            if (destination.id == feedDestinationId && previousDestinationId == userWorksViewerDestinationId) {
+                Log.d(TAG, "从用户弹窗返回到feed，恢复播放器，previousDestinationId=$previousDestinationId")
+                // 使用延迟执行，确保 Fragment 已经恢复
+                view?.post {
+                    restorePlayerFromUserWorksViewer()
+                }
+            }
+            
+            // 记录当前的导航目标，作为下次的前一个目标
+            previousDestinationId = destination.id
         }
     }
 }

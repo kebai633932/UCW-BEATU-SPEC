@@ -401,10 +401,51 @@ class VideoItemViewModel @Inject constructor(
             handoffInProgress = false
         } ?: run {
             // 如果没有 session，根据当前状态决定是否播放
+            // ✅ 修复：即使没有会话，也要使用 Surface 检测机制来恢复播放
             val shouldPlay = _uiState.value.isPlaying
             android.util.Log.d("VideoItemViewModel", "onHostResume: 无会话，是否应该播放=$shouldPlay，播放状态=${player.player.playbackState}")
             if (shouldPlay && player.player.playbackState == Player.STATE_READY) {
-                player.play()
+                // 检查 Surface 是否准备好
+                val hasVideoSize = player.player.videoSize.width > 0 && player.player.videoSize.height > 0
+                if (!hasVideoSize) {
+                    // 没有视频尺寸，Surface 可能还没准备好，等待首帧渲染
+                    android.util.Log.d("VideoItemViewModel", "onHostResume: 播放器已准备好但未检测到视频尺寸，等待 Surface 初始化")
+                    
+                    var surfaceReadyHandled = false
+                    val surfaceReadyListener = object : Player.Listener {
+                        override fun onRenderedFirstFrame() {
+                            if (!surfaceReadyHandled) {
+                                surfaceReadyHandled = true
+                                android.util.Log.d("VideoItemViewModel", "onHostResume: Surface 准备好，首帧已渲染，开始播放")
+                                player.player.removeListener(this)
+                                player.play()
+                            }
+                        }
+                    }
+                    player.player.addListener(surfaceReadyListener)
+                    
+                    // 延迟检查
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(300)
+                        if (!surfaceReadyHandled) {
+                            if (player.player.videoSize.width > 0 && player.player.videoSize.height > 0) {
+                                surfaceReadyHandled = true
+                                android.util.Log.d("VideoItemViewModel", "onHostResume: 检测到视频尺寸，Surface 可能已准备好，开始播放")
+                                player.player.removeListener(surfaceReadyListener)
+                                player.play()
+                            } else {
+                                // 强制播放（避免一直等待）
+                                android.util.Log.w("VideoItemViewModel", "onHostResume: 300ms后仍未检测到视频尺寸，强制播放")
+                                surfaceReadyHandled = true
+                                player.player.removeListener(surfaceReadyListener)
+                                player.play()
+                            }
+                        }
+                    }
+                } else {
+                    // 已经有视频尺寸，Surface 可能已准备好，直接播放
+                    player.play()
+                }
             }
         }
         startProgressUpdates()
