@@ -36,6 +36,25 @@ class VideoFeedAdapter(
         }
     }
 
+    override fun getItemId(position: Int): Long {
+        // 使用 videoId 的 hashCode 作为唯一标识
+        // 这样当列表顺序改变时，ViewPager2 会知道 Fragment 需要重新创建
+        if (videoList.isEmpty()) {
+            return position.toLong()
+        }
+        val safeIndex = position % videoList.size
+        val videoItem = videoList[safeIndex]
+        // 使用 videoId 的 hashCode，确保每个视频有唯一的 ID
+        // 即使列表顺序改变，ViewPager2 也能识别出需要重新创建 Fragment
+        return videoItem.id.hashCode().toLong()
+    }
+
+    override fun containsItem(itemId: Long): Boolean {
+        // 检查 itemId 是否在当前列表中
+        // 在无限循环模式下，需要检查所有可能的 position
+        return videoList.any { it.id.hashCode().toLong() == itemId }
+    }
+
     override fun createFragment(position: Int): Fragment {
         val safeIndex = if (videoList.isEmpty()) 0 else position % videoList.size
         val videoItem = videoList[safeIndex]

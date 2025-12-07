@@ -48,6 +48,10 @@ class MainActivity : AppCompatActivity(), MainActivityBridge {
     private var recommendTabCenterY: Float = 0f
 
     private var currentTabPosition = 1 // 默认显示推荐页面
+    
+    // 双击刷新相关
+    private var lastRecommendTabClickTime = 0L
+    private val DOUBLE_CLICK_DELAY_MS = 300L // 双击间隔时间（毫秒）
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -131,8 +135,23 @@ class MainActivity : AppCompatActivity(), MainActivityBridge {
             feedFragmentCallback?.switchToTab(0)
         }
 
+        // 推荐 Tab 双击刷新
         btnRecommend?.setOnClickListener {
-            feedFragmentCallback?.switchToTab(1)
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastRecommendTabClickTime < DOUBLE_CLICK_DELAY_MS) {
+                // 双击触发刷新
+                if (currentTabPosition == 1) {
+                    triggerRecommendRefresh()
+                } else {
+                    // 如果不在推荐页，先切换到推荐页
+                    feedFragmentCallback?.switchToTab(1)
+                }
+                lastRecommendTabClickTime = 0 // 重置，避免连续触发
+            } else {
+                // 单击切换 Tab
+                feedFragmentCallback?.switchToTab(1)
+                lastRecommendTabClickTime = currentTime
+            }
         }
 
         // 设置"我"图标点击事件
@@ -447,5 +466,37 @@ class MainActivity : AppCompatActivity(), MainActivityBridge {
                 Log.e(TAG, "Failed to navigate to landscape", e)
             }
         }
+    }
+    
+    /**
+     * 触发推荐页刷新
+     */
+    private fun triggerRecommendRefresh() {
+        Log.d(TAG, "triggerRecommendRefresh called, currentTabPosition: $currentTabPosition, feedFragmentCallback: ${feedFragmentCallback != null}")
+        if (currentTabPosition == 1) {
+            val feedFragment = feedFragmentCallback as? FeedFragment
+            if (feedFragment != null) {
+                Log.d(TAG, "Calling refreshRecommendFragment")
+                feedFragment.refreshRecommendFragment()
+            } else {
+                Log.w(TAG, "feedFragmentCallback is not FeedFragment")
+            }
+        } else {
+            Log.d(TAG, "Not in recommend tab, currentTabPosition: $currentTabPosition")
+        }
+    }
+    
+    /**
+     * 隐藏推荐文字
+     */
+    override fun hideRecommendText() {
+        btnRecommend?.visibility = View.GONE
+    }
+    
+    /**
+     * 显示推荐文字
+     */
+    override fun showRecommendText() {
+        btnRecommend?.visibility = View.VISIBLE
     }
 }

@@ -15,6 +15,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.ucw.beatu.business.videofeed.presentation.R
 import com.ucw.beatu.shared.common.model.VideoItem
@@ -22,6 +23,7 @@ import com.ucw.beatu.business.videofeed.presentation.ui.adapter.VideoFeedAdapter
 import com.ucw.beatu.business.videofeed.presentation.viewmodel.RecommendViewModel
 import com.ucw.beatu.shared.common.navigation.NavigationHelper
 import com.ucw.beatu.shared.common.navigation.NavigationIds
+import com.ucw.beatu.business.videofeed.presentation.ui.FeedFragment.MainActivityBridge
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -55,6 +57,23 @@ class RecommendFragment : Fragment() {
     private val ORIENTATION_CHECK_THROTTLE_MS = 300L // 防抖间隔：300ms
     private var previousDestinationId: Int? = null // 记录之前的导航目标，用于检测返回
 
+    // MainActivity 引用（用于控制加载动画）
+    private var mainActivity: MainActivityBridge? = null
+
+    // 下拉刷新状态管理
+    private var pullToRefreshState = PullToRefreshState.IDLE
+    private var pullStartY = 0f
+    private var pullCurrentY = 0f
+    private var pullThreshold = 0f // 下拉阈值（将在 onViewCreated 中初始化）
+
+    // 下拉刷新状态枚举
+    private enum class PullToRefreshState {
+        IDLE,           // 空闲状态
+        PULLING,        // 正在下拉
+        REFRESHING,     // 正在刷新
+        COMPLETED       // 刷新完成
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -66,6 +85,12 @@ class RecommendFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        // 获取 MainActivity 引用
+        mainActivity = activity as? MainActivityBridge
+
+        // 初始化下拉刷新阈值
+        pullThreshold = 100f * resources.displayMetrics.density
 
         viewPager = view.findViewById(R.id.viewpager_video_feed)
         viewPager?.let { vp ->
@@ -154,29 +179,157 @@ class RecommendFragment : Fragment() {
         pendingResumeRequest = true
     }
 
+    /**
+     * 设置下拉刷新功能
+     * 使用"手势判断 + 状态管理 + 动画控制"的思路
+     */
     private fun setupPullToRefresh(viewPager: ViewPager2) {
-        var touchStartY = 0f
-        var hasTriggeredRefresh = false
+        // 获取 ViewPager2 内部的 RecyclerView
+        val recyclerView = viewPager.getChildAt(0) as? RecyclerView ?: return
 
-        viewPager.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    touchStartY = event.y
-                    hasTriggeredRefresh = false
+        // 在 RecyclerView 上设置触摸监听，这样可以更可靠地拦截事件
+        recyclerView.setOnTouchListener { v, event ->
+            handlePullToRefreshTouch(viewPager, recyclerView, event)
+        }
+    }
+
+    /**
+     * 处理下拉刷新的触摸事件
+     * @param viewPager ViewPager2 实例
+     * @param recyclerView RecyclerView 实例
+     * @param event 触摸事件
+     * @return 是否消费了事件
+     */
+    private fun handlePullToRefreshTouch(
+        viewPager: ViewPager2,
+        recyclerView: RecyclerView,
+        event: MotionEvent
+    ): Boolean {
+        // 只在第一个视频时处理下拉刷新
+        if (viewPager.currentItem != 0) {
+            resetPullToRefreshState()
+            return false
+        }
+
+        // 检查 RecyclerView 是否在顶部（不能向上滚动）
+        val canScrollUp = recyclerView.canScrollVertically(-1)
+
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                // 手势开始：记录起始位置
+                if (!canScrollUp && pullToRefreshState == PullToRefreshState.IDLE) {
+                    pullStartY = event.y
+                    pullCurrentY = event.y
+                    pullToRefreshState = PullToRefreshState.PULLING
+                    Log.d(TAG, "PullToRefresh: ACTION_DOWN, startY=$pullStartY")
                 }
-                MotionEvent.ACTION_MOVE -> {
-                    if (viewPager.currentItem == 0 && !isRefreshing && !hasTriggeredRefresh) {
-                        val deltaY = event.y - touchStartY
-                        if (deltaY > 100 * resources.displayMetrics.density) {
-                            hasTriggeredRefresh = true
-                            isRefreshing = true
-                            viewModel.refreshVideoList()
-                            Log.d(TAG, "Trigger pull to refresh (deltaY: $deltaY)")
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (pullToRefreshState == PullToRefreshState.PULLING) {
+                    pullCurrentY = event.y
+                    val deltaY = pullCurrentY - pullStartY // 向下滑动，deltaY 为正
+
+                    Log.d(TAG, "PullToRefresh: ACTION_MOVE, deltaY=$deltaY, threshold=$pullThreshold, canScrollUp=$canScrollUp")
+
+                    // 检查是否是向下滑动且超过阈值
+                    if (deltaY > 0 && !canScrollUp) {
+                        // 如果超过阈值且还未触发刷新，则触发刷新
+                        if (deltaY > pullThreshold && !isRefreshing) {
+                            triggerRefresh()
+                            return true // 消费事件，防止 ViewPager2 滑动
                         }
+                    } else {
+                        // 如果向上滑动或可以向上滚动，重置状态
+                        resetPullToRefreshState()
                     }
                 }
             }
-            false
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                Log.d(TAG, "PullToRefresh: ACTION_UP/CANCEL, state=$pullToRefreshState")
+                // 如果正在下拉但未触发刷新，重置状态
+                if (pullToRefreshState == PullToRefreshState.PULLING) {
+                    resetPullToRefreshState()
+                }
+            }
+        }
+
+        // 如果正在刷新，消费事件防止 ViewPager2 滑动
+        return pullToRefreshState == PullToRefreshState.REFRESHING
+    }
+
+    /**
+     * 触发刷新
+     */
+    private fun triggerRefresh() {
+        if (isRefreshing || pullToRefreshState == PullToRefreshState.REFRESHING) {
+            return
+        }
+
+        pullToRefreshState = PullToRefreshState.REFRESHING
+        isRefreshing = true
+
+        Log.d(TAG, "PullToRefresh: Trigger refresh, mainActivity=${mainActivity != null}")
+
+        // 隐藏"推荐"文字
+        mainActivity?.hideRecommendText()
+
+        // 暂停当前视频
+        pauseAllVideoItems()
+
+        // 调用 ViewModel 刷新
+        viewModel.refreshVideoList()
+    }
+
+    /**
+     * 重置下拉刷新状态
+     */
+    private fun resetPullToRefreshState() {
+        if (pullToRefreshState == PullToRefreshState.PULLING) {
+            pullToRefreshState = PullToRefreshState.IDLE
+            pullStartY = 0f
+            pullCurrentY = 0f
+            Log.d(TAG, "PullToRefresh: Reset state to IDLE")
+        }
+    }
+
+    /**
+     * 完成刷新（由 observeViewModel 调用）
+     */
+    private fun completeRefresh() {
+        if (pullToRefreshState == PullToRefreshState.REFRESHING) {
+            pullToRefreshState = PullToRefreshState.COMPLETED
+            isRefreshing = false
+
+            Log.d(TAG, "PullToRefresh: Refresh completed")
+
+            // 显示"推荐"文字
+            mainActivity?.showRecommendText()
+
+            // 延迟重置状态，避免立即触发新的下拉
+            viewPager?.postDelayed({
+                pullToRefreshState = PullToRefreshState.IDLE
+            }, 300)
+        }
+    }
+
+    /**
+     * 刷新视频列表（供外部调用）
+     */
+    fun refreshVideoList() {
+        if (!isRefreshing) {
+            Log.d(TAG, "refreshVideoList called, mainActivity: ${mainActivity != null}")
+            isRefreshing = true
+            mainActivity?.hideRecommendText()
+
+            // 刷新时暂停当前视频
+            pauseAllVideoItems()
+            Log.d(TAG, "Paused all videos before refresh")
+
+            viewModel.refreshVideoList()
+        } else {
+            Log.d(TAG, "refreshVideoList called but already refreshing")
         }
     }
 
@@ -184,20 +337,118 @@ class RecommendFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
+                    Log.d(TAG, "observeViewModel: isRefreshing=${state.isRefreshing}, local isRefreshing=$isRefreshing, videoList.size=${state.videoList.size}")
+
+                    // 监听刷新状态，控制加载动画（必须在列表处理之前，确保状态及时更新）
+                    var refreshJustCompleted = false
+                    if (state.isRefreshing) {
+                        if (!isRefreshing) {
+                            // 开始刷新（可能是双击触发或其他方式触发）
+                            isRefreshing = true
+                            pullToRefreshState = PullToRefreshState.REFRESHING
+                            Log.d(TAG, "State is refreshing")
+                            mainActivity?.hideRecommendText()
+                        }
+                    } else {
+                        if (isRefreshing) {
+                            // 刷新完成
+                            Log.d(TAG, "Refresh completed, videoList.size=${state.videoList.size}")
+                            refreshJustCompleted = true
+                            completeRefresh() // 使用统一的状态管理方法
+                        }
+                    }
+
                     if (state.videoList.isNotEmpty()) {
                         val hasInitialData = (adapter?.itemCount ?: 0) == 0
+                        val previousListSize = adapter?.itemCount ?: 0
+                        val currentViewPagerItem = viewPager?.currentItem ?: 0
+
+                        // 检查列表的第一个视频是否变化（用于检测列表是否被替换）
+                        val previousFirstVideo = adapter?.getVideoAt(0)?.id
+                        val newFirstVideo = state.videoList.firstOrNull()?.id
+                        val isListReplaced = !hasInitialData && previousFirstVideo != null && previousFirstVideo != newFirstVideo
+
+                        // 打印更新前的状态
+                        Log.d(TAG, "observeViewModel: Updating video list - previousSize=$previousListSize, currentSize=${state.videoList.size}, currentViewPagerItem=$currentViewPagerItem")
+                        Log.d(TAG, "observeViewModel: previousFirstVideo=$previousFirstVideo, newFirstVideo=$newFirstVideo, isListReplaced=$isListReplaced")
+                        if (state.videoList.isNotEmpty()) {
+                            Log.d(TAG, "observeViewModel: First video in new list: ${state.videoList[0].id}")
+                        }
+
+                        // ViewModel 已经将新视频插入到完整列表顶部，直接更新整个列表
                         adapter?.updateVideoList(state.videoList, state.hasLoadedAllFromBackend)
 
-                        // ✅ 修复：先处理状态恢复，再处理刷新
-                        pendingRestoreIndex?.let { target ->
-                            val safeIndex = target.coerceIn(0, state.videoList.lastIndex)
-                            viewPager?.post { viewPager?.setCurrentItem(safeIndex, false) }
-                            pendingRestoreIndex = null
-                        }
-                        // 刷新完成后回到首页
-                        if (isRefreshing && !state.isRefreshing) {
-                            isRefreshing = false
-                            viewPager?.setCurrentItem(0, false)
+                        // 刷新完成后，立即跳转到第一个视频并播放（优先级最高）
+                        if (refreshJustCompleted) {
+                            Log.d(TAG, "Refresh completed: updated list with ${state.videoList.size} videos, jumping to first video immediately")
+                            val firstVideoId = state.videoList.firstOrNull()?.id
+                            Log.d(TAG, "Refresh completed: First video in new list: $firstVideoId")
+
+                            // 先暂停所有视频，确保旧 Fragment 都暂停
+                            pauseAllVideoItems()
+
+                            // 等待 adapter 更新完成，然后跳转到第一个视频
+                            // 使用 post 确保在下一个 UI 周期执行，让 ViewPager2 有时间更新 Fragment
+                            viewPager?.post {
+                                val currentItem = viewPager?.currentItem ?: 0
+                                Log.d(TAG, "Refresh completed: currentViewPagerItem=$currentItem, jumping to position 0")
+                                // 刷新后总是跳转到第一个视频（新列表的第一个）
+                                viewPager?.setCurrentItem(0, false)
+
+                                // 等待 ViewPager2 更新 Fragment，然后验证并触发播放
+                                // 由于我们重写了 getItemId，ViewPager2 会知道需要重新创建 Fragment
+                                viewPager?.postDelayed({
+                                    // 验证第一个 Fragment 是否匹配预期的 videoId
+                                    val itemIdAt0 = adapter?.getItemId(0) ?: 0L
+                                    val fragmentAt0 = childFragmentManager.findFragmentByTag("f$itemIdAt0")
+                                    val fragmentVideoId = when (fragmentAt0) {
+                                        is VideoItemFragment -> {
+                                            fragmentAt0.arguments?.let {
+                                                androidx.core.os.BundleCompat.getParcelable(it, "video_item", com.ucw.beatu.shared.common.model.VideoItem::class.java)
+                                            }?.id
+                                        }
+                                        is ImagePostFragment -> {
+                                            fragmentAt0.arguments?.let {
+                                                androidx.core.os.BundleCompat.getParcelable(it, "image_post_item", com.ucw.beatu.shared.common.model.VideoItem::class.java)
+                                            }?.id
+                                        }
+                                        else -> null
+                                    }
+
+                                    if (fragmentVideoId == firstVideoId) {
+                                        Log.d(TAG, "Refresh completed: Fragment at position 0 matches expected videoId=$firstVideoId, triggering playback")
+                                        // Fragment 已更新，触发播放
+                                        handlePageSelected(0)
+                                    } else {
+                                        Log.w(TAG, "Refresh completed: Fragment at position 0 doesn't match (expected=$firstVideoId, actual=$fragmentVideoId), waiting longer")
+                                        // Fragment 还没更新，再等待一下
+                                        viewPager?.postDelayed({
+                                            handlePageSelected(0)
+                                            Log.d(TAG, "Refresh completed: Retrying playback after additional delay")
+                                        }, 200)
+                                    }
+                                }, 300)
+                            }
+                        } else {
+                            // 如果列表被替换（远程数据替换本地缓存），但不是刷新完成，也需要确保 ViewPager2 显示正确的第一个视频
+                            if (isListReplaced) {
+                                Log.d(TAG, "observeViewModel: List replaced (remote data replaced local cache), resetting ViewPager2 to first item")
+                                viewPager?.post {
+                                    viewPager?.setCurrentItem(0, false)
+                                    // 确保第一个视频正确播放
+                                    viewPager?.postDelayed({
+                                        handlePageSelected(0)
+                                        Log.d(TAG, "observeViewModel: Reset ViewPager2 to first video after list replacement")
+                                    }, 100)
+                                }
+                            }
+
+                            // ✅ 修复：先处理状态恢复，再处理刷新
+                            pendingRestoreIndex?.let { target ->
+                                val safeIndex = target.coerceIn(0, state.videoList.lastIndex)
+                                viewPager?.post { viewPager?.setCurrentItem(safeIndex, false) }
+                                pendingRestoreIndex = null
+                            }
                         }
 
                         // 首次加载完成时，手动触发当前页的播放/轮播（包括图文）
@@ -205,10 +456,16 @@ class RecommendFragment : Fragment() {
                             val currentIndex = viewPager?.currentItem ?: 0
                             viewPager?.post { handlePageSelected(currentIndex) }
                         }
+                    } else {
+                        Log.d(TAG, "Video list is empty")
                     }
 
                     state.error?.let { error ->
                         Log.e(TAG, "Error: $error")
+                        // 如果有错误，也要重置刷新状态并显示推荐文字
+                        if (isRefreshing) {
+                            completeRefresh() // 使用统一的状态管理方法
+                        }
                     }
                 }
             }
@@ -233,6 +490,7 @@ class RecommendFragment : Fragment() {
                         val absDeltaY = abs(deltaY)
                         val minHorizontalDistance = 100 * resources.displayMetrics.density
 
+                        // 只处理明显的水平滑动（水平距离远大于垂直距离）
                         if (absDeltaX > absDeltaY * 2 &&
                             deltaX < 0 &&
                             absDeltaX > minHorizontalDistance &&
@@ -247,8 +505,14 @@ class RecommendFragment : Fragment() {
             )
 
             view.setOnTouchListener { _, event ->
+                // 只处理水平滑动，垂直滑动（下拉刷新）让 ViewPager2 处理
                 val handled = gestureDetector?.onTouchEvent(event) ?: false
-                handled
+                // 如果是垂直滑动，返回 false 让事件继续传递
+                if (!handled) {
+                    false
+                } else {
+                    handled
+                }
             }
         }
     }
@@ -299,25 +563,133 @@ class RecommendFragment : Fragment() {
      * 处理页面选中事件：暂停所有视频，只播放当前可见的视频
      */
     private fun handlePageSelected(position: Int) {
-        // ViewPager2 的 FragmentStateAdapter 使用 "f" + position 作为 Fragment tag
-        val currentFragmentTag = "f$position"
+        // ViewPager2 的 FragmentStateAdapter 使用 "f" + getItemId(position) 作为 Fragment tag
+        // 由于我们重写了 getItemId，需要使用 adapter 的 getItemId 来获取正确的 tag
+        val itemId = adapter?.getItemId(position) ?: position.toLong()
+        val currentFragmentTag = "f$itemId"
         val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
+
+        // 从 adapter 获取当前 position 应该显示的 videoId（考虑无限循环模式）
+        val expectedVideo = adapter?.getVideoAt(position)
+        val expectedVideoId = expectedVideo?.id
+
+        // 验证当前 Fragment 是否匹配预期的 videoId
+        // 注意：videoItem 和 imagePost 是 private，通过 arguments 获取
+        val currentFragmentVideoId = when (currentFragment) {
+            is VideoItemFragment -> {
+                val args = currentFragment.arguments
+                val item = args?.let {
+                    androidx.core.os.BundleCompat.getParcelable(it, "video_item", com.ucw.beatu.shared.common.model.VideoItem::class.java)
+                }
+                item?.id
+            }
+            is ImagePostFragment -> {
+                val args = currentFragment.arguments
+                val item = args?.let {
+                    androidx.core.os.BundleCompat.getParcelable(it, "image_post_item", com.ucw.beatu.shared.common.model.VideoItem::class.java)
+                }
+                item?.id
+            }
+            else -> null
+        }
+
+        // 如果 Fragment 不匹配预期的 videoId，说明 ViewPager2 还没有更新 Fragment
+        // 这种情况在刷新后很常见，需要等待 ViewPager2 更新
+        if (expectedVideoId != null && currentFragmentVideoId != null && currentFragmentVideoId != expectedVideoId) {
+            Log.w(TAG, "handlePageSelected: Fragment mismatch at position $position - expected=$expectedVideoId, actual=$currentFragmentVideoId, waiting for ViewPager2 to update")
+            // 不处理，等待 ViewPager2 更新 Fragment
+            return
+        }
+
+        // 将 adapter 赋值给局部变量，避免智能转换问题
+        val currentAdapter = adapter
 
         childFragmentManager.fragments.forEach { fragment ->
             when (fragment) {
                 is VideoItemFragment -> {
-                    if (fragment == currentFragment && fragment.isVisible) {
+                    // 从 arguments 获取 videoId
+                    val fragmentArgs = fragment.arguments
+                    val fragmentVideoItem = fragmentArgs?.let {
+                        androidx.core.os.BundleCompat.getParcelable(it, "video_item", com.ucw.beatu.shared.common.model.VideoItem::class.java)
+                    }
+                    val fragmentVideoId = fragmentVideoItem?.id
+
+                    // 验证 Fragment 是否匹配当前列表中的视频
+                    // 注意：由于我们重写了 getItemId，tag 格式是 "f" + getItemId(position)，而不是 "f" + position
+                    // 我们通过检查 Fragment 的 videoId 是否在当前列表中来验证有效性
+                    // 如果 Fragment 的 videoId 在当前列表中，且 tag 匹配，则认为有效
+                    val isFragmentValid = if (fragmentVideoId != null && currentAdapter != null) {
+                        // 检查 videoId 是否在当前列表中（只检查前几个 position，避免无限循环模式下的性能问题）
+                        // 使用 adapter 的实际列表大小（通过 getVideoAt 获取，最多检查 100 个 position）
+                        val maxCheckPositions = minOf(100, currentAdapter.itemCount)
+                        var found = false
+                        for (pos in 0 until maxCheckPositions) {
+                            val videoAtPos = currentAdapter.getVideoAt(pos)
+                            if (videoAtPos?.id == fragmentVideoId) {
+                                val itemIdAtPos = currentAdapter.getItemId(pos)
+                                val expectedTag = "f$itemIdAtPos"
+                                if (fragment.tag == expectedTag) {
+                                    found = true
+                                    break
+                                }
+                            }
+                        }
+                        found
+                    } else {
+                        true // 如果无法验证，假设有效
+                    }
+
+                    if (fragment == currentFragment && fragment.isVisible && isFragmentValid) {
+                        Log.d(TAG, "handlePageSelected: play VideoItemFragment tag=${fragment.tag}, videoId=$fragmentVideoId")
                         fragment.checkVisibilityAndPlay()
                     } else {
-                        Log.d(TAG, "handlePageSelected: pause VideoItemFragment tag=${fragment.tag}")
+                        if (!isFragmentValid) {
+                            Log.w(TAG, "handlePageSelected: Fragment at tag=${fragment.tag} is invalid (expected videoId in list, actual=$fragmentVideoId), skipping")
+                        } else {
+                            Log.d(TAG, "handlePageSelected: pause VideoItemFragment tag=${fragment.tag}, videoId=$fragmentVideoId")
+                        }
                         fragment.onParentVisibilityChanged(false)
                     }
                 }
                 is ImagePostFragment -> {
-                    if (fragment == currentFragment && fragment.isVisible) {
+                    // 从 arguments 获取 postId
+                    val fragmentArgs = fragment.arguments
+                    val fragmentPostItem = fragmentArgs?.let {
+                        androidx.core.os.BundleCompat.getParcelable(it, "image_post_item", com.ucw.beatu.shared.common.model.VideoItem::class.java)
+                    }
+                    val fragmentPostId = fragmentPostItem?.id
+
+                    // 验证 Fragment 是否匹配当前列表中的视频
+                    // 注意：由于我们重写了 getItemId，tag 格式是 "f" + getItemId(position)，而不是 "f" + position
+                    val isFragmentValid = if (fragmentPostId != null && currentAdapter != null) {
+                        // 检查 postId 是否在当前列表中（只检查前几个 position，避免无限循环模式下的性能问题）
+                        val maxCheckPositions = minOf(100, currentAdapter.itemCount)
+                        var found = false
+                        for (pos in 0 until maxCheckPositions) {
+                            val videoAtPos = currentAdapter.getVideoAt(pos)
+                            if (videoAtPos?.id == fragmentPostId) {
+                                val itemIdAtPos = currentAdapter.getItemId(pos)
+                                val expectedTag = "f$itemIdAtPos"
+                                if (fragment.tag == expectedTag) {
+                                    found = true
+                                    break
+                                }
+                            }
+                        }
+                        found
+                    } else {
+                        true // 如果无法验证，假设有效
+                    }
+
+                    if (fragment == currentFragment && fragment.isVisible && isFragmentValid) {
+                        Log.d(TAG, "handlePageSelected: play ImagePostFragment tag=${fragment.tag}, postId=$fragmentPostId")
                         fragment.checkVisibilityAndPlay()
                     } else {
-                        Log.d(TAG, "handlePageSelected: pause ImagePostFragment tag=${fragment.tag}")
+                        if (!isFragmentValid) {
+                            Log.w(TAG, "handlePageSelected: Fragment at tag=${fragment.tag} is invalid (expected postId in list, actual=$fragmentPostId), skipping")
+                        } else {
+                            Log.d(TAG, "handlePageSelected: pause ImagePostFragment tag=${fragment.tag}, postId=$fragmentPostId")
+                        }
                         fragment.onParentVisibilityChanged(false)
                     }
                 }
@@ -420,7 +792,7 @@ class RecommendFragment : Fragment() {
         if (currentPosition >= 0) {
             val currentFragmentTag = "f$currentPosition"
             val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
-            
+
             // 确保获取的是真正可见的Fragment
             if (currentFragment is VideoItemFragment && currentFragment.isVisible) {
                 Log.d(TAG, "从用户弹窗返回，恢复当前可见的VideoItemFragment播放器，position=$currentPosition")
@@ -431,7 +803,7 @@ class RecommendFragment : Fragment() {
             }
         }
     }
-    
+
     /**
      * 通知进入横屏模式（供 VideoItemFragment 调用，确保按钮横屏和自然横屏逻辑一致）
      */
@@ -461,10 +833,10 @@ class RecommendFragment : Fragment() {
      */
     private fun setupNavigationListener() {
         val navController = findNavController()
-        
+
         // 初始化 previousDestinationId 为当前的目标
         previousDestinationId = navController.currentDestination?.id
-        
+
         navController.addOnDestinationChangedListener { _, destination, _ ->
             val feedDestinationId = NavigationHelper.getResourceId(
                 requireContext(),
@@ -474,14 +846,14 @@ class RecommendFragment : Fragment() {
                 requireContext(),
                 NavigationIds.USER_WORKS_VIEWER
             )
-            
+
             // 当从landscape返回到feed时，恢复播放器
             if (destination.id == feedDestinationId && isLandscapeMode) {
                 Log.d(TAG, "从landscape返回到feed，恢复播放器")
                 // 使用统一的退出横屏逻辑
                 notifyExitLandscapeMode()
             }
-            
+
             // ✅ 修复：当从用户弹窗（USER_WORKS_VIEWER）返回到feed时，恢复播放器
             if (destination.id == feedDestinationId && previousDestinationId == userWorksViewerDestinationId) {
                 Log.d(TAG, "从用户弹窗返回到feed，恢复播放器，previousDestinationId=$previousDestinationId")
@@ -490,7 +862,7 @@ class RecommendFragment : Fragment() {
                     restorePlayerFromUserWorksViewer()
                 }
             }
-            
+
             // 记录当前的导航目标，作为下次的前一个目标
             previousDestinationId = destination.id
         }

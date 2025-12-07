@@ -757,6 +757,57 @@
     3. Android 端打通 DTO → Domain → Presentation 链路：`VideoDto` / `Video` / `videofeed.presentation.VideoItem` 全量接收并映射上述字段，通过 `contentType` 与 `imageUrls` 自动切换 `VIDEO` / `IMAGE_POST` 渲染分支。
     4. 统一推荐页视觉与交互：调整竖屏视频页进度条布局使其宽度与底部作者+互动区及图文页进度条一致；更新图文页底部交互区图标为与 `VideoControlsView` 相同的 selector 资源，保证点赞/收藏/评论/分享的样式和点亮逻辑完全一致。
 
+- [x] 推荐页刷新功能实现与优化
+  - 2025-12-07 - done by ZX
+  - 需求：实现推荐页刷新功能，支持双击"推荐"tab和下拉第一个视频两种方式触发刷新，刷新时获取最新视频并插入到列表顶部，同时实现视频列表随机打乱。
+  - 内容：
+    1. ✅ **刷新触发方式**：
+       - 双击"推荐"tab触发刷新：在 `MainActivity` 中监听推荐tab双击事件（300ms内连续点击），调用 `FeedFragment.refreshRecommendFragment()` 触发刷新
+       - 下拉第一个视频触发刷新：在 `RecommendFragment` 中通过 `setupPullToRefresh()` 实现下拉刷新，使用"手势判断 + 状态管理 + 动画控制"的思路
+    2. ✅ **下拉刷新实现**：
+       - **手势判断**：在 ViewPager2 内部的 RecyclerView 上设置触摸监听，检测下拉手势
+       - **状态管理**：引入 `PullToRefreshState` 枚举（IDLE、PULLING、REFRESHING、COMPLETED），统一管理刷新状态
+       - **动画控制**：刷新时隐藏"推荐"文字，刷新完成后恢复显示
+       - **事件消费**：刷新时消费触摸事件，防止 ViewPager2 滑动
+    3. ✅ **刷新逻辑**：
+       - 获取最新 5-10 条视频（随机数量）
+       - 插入到列表顶部（去重，只插入新视频）
+       - 暂停当前所有视频
+       - 刷新完成后自动跳转到第一个视频并播放
+    4. ✅ **视频列表随机打乱**：
+       - 在 `RecommendViewModel.loadVideoList()` 中，首次加载或远程数据替换本地缓存时，使用 `shuffled(Random(System.currentTimeMillis()))` 打乱列表
+       - 在 `refreshVideoList()` 和 `loadMoreVideos()` 中，插入新视频后也打乱整个列表
+       - 使用时间戳作为随机种子，确保每次打开app的视频列表顺序不同
+    5. ✅ **ViewPager2 适配器优化**：
+       - 重写 `getItemId(position)` 返回 `videoId.hashCode().toLong()`，确保每个视频有唯一ID
+       - 重写 `containsItem(itemId)` 检查视频是否在列表中
+       - 当列表更新时，ViewPager2 会重新创建 Fragment，确保UI反映新的列表顺序
+    6. ✅ **刷新状态同步**：
+       - `RecommendViewModel` 通过 `StateFlow` 管理 `isRefreshing` 状态
+       - `RecommendFragment` 监听刷新状态，控制"推荐"文字的显示/隐藏
+       - 刷新完成时，通过 `setCurrentItem(0, false)` 跳转到第一个视频，延迟调用 `handlePageSelected(0)` 确保播放
+    7. ✅ **UI优化**：
+       - 刷新时隐藏"推荐"文字，刷新完成后恢复显示
+       - 刷新过程中暂停所有视频，避免音画混乱
+       - 刷新完成后自动播放第一个视频，提供流畅的刷新体验
+  - 技术亮点：
+    - **手势判断优化**：在 RecyclerView 上监听触摸事件，比在 ViewPager2 上更可靠，能正确检测下拉手势
+    - **状态管理清晰**：使用枚举管理刷新状态，避免状态不一致问题
+    - **与 ViewModel 联动**：刷新状态通过 StateFlow 同步，UI 层和 ViewModel 层状态一致
+    - **随机打乱机制**：使用时间戳作为随机种子，确保每次打开app的视频列表顺序不同
+    - **ViewPager2 适配器优化**：通过 `getItemId` 和 `containsItem` 确保列表更新时 Fragment 正确重建
+  - 量化指标：
+    - 双击刷新响应时间：< 100ms
+    - 下拉刷新阈值：100dp（约 300px）
+    - 刷新获取视频数量：5-10 条（随机）
+    - 刷新完成到播放首条视频延迟：< 200ms
+  - 修改文件：
+    - `BeatUClient/app/src/main/java/com/ucw/beatu/MainActivity.kt`
+    - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/FeedFragment.kt`
+    - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/RecommendFragment.kt`
+    - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/viewmodel/RecommendViewModel.kt`
+    - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/adapter/VideoFeedAdapter.kt`
+
 
 - [x] 修复加载的视频没有封面的问题
     - 2025-12-02 - done by KJH
@@ -1162,135 +1213,17 @@
         - 回弹效果：边界滑动时提供流畅的回弹动画，提升用户体验
         - 所有来源支持：搜索、历史、收藏、点赞、作品等所有来源的视频列表都支持横屏切换和边界提示
 
-- [x] fix: 修复用户视频列表页没有横屏功能的问题
-    - 2025-12-07 - done by KJH
-    - 需求：在用户视频列表页（UserWorksViewerFragment）中，点击横屏按钮无法切换到横屏模式，导致用户无法在用户作品观看页面使用横屏功能。
-    - 问题分析：
-      1. **导航 Action 硬编码**：`VideoItemFragment.openLandscapeMode()` 方法硬编码使用 `ACTION_FEED_TO_LANDSCAPE`，没有根据当前导航目的地动态选择正确的 action
-      2. **缺少从横屏返回的恢复逻辑**：`UserWorksViewerFragment` 没有监听从横屏返回的事件，无法恢复播放器
-      3. **模块间依赖问题**：`UserWorksViewerFragment` 直接引用 `VideoItemFragment` 类，违反了模块化架构原则
-    - 修复方案：
-      1. ✅ **动态选择导航 Action**：
-         - 修改 `VideoItemFragment.openLandscapeMode()` 方法，根据当前导航目的地动态选择正确的 action
-         - 如果当前在 `USER_WORKS_VIEWER` 页面，使用 `ACTION_USER_WORKS_VIEWER_TO_LANDSCAPE`
-         - 否则，使用 `ACTION_FEED_TO_LANDSCAPE`（默认）
-         - 通过 `navController.currentDestination?.id` 获取当前导航目的地
-      2. ✅ **添加导航监听器**：
-         - 在 `UserWorksViewerFragment` 中添加 `setupNavigationListener()` 方法
-         - 监听导航返回事件，当从横屏返回到用户作品观看页面时，自动恢复播放器
-         - 使用 `previousDestinationId` 变量跟踪前一个导航目标
-      3. ✅ **扩展 Router 接口**：
-         - 在 `VideoItemRouter` 接口中添加 `restorePlayerFromLandscape(fragment: Fragment)` 方法
-         - 在 `VideoItemRouterImpl` 中实现该方法，调用 `VideoItemFragment.restorePlayerFromLandscape()`
-         - 避免 `UserWorksViewerFragment` 直接依赖 `VideoItemFragment` 类
-      4. ✅ **添加播放器恢复逻辑**：
-         - 在 `UserWorksViewerFragment` 中添加 `restorePlayerFromLandscape()` 方法
-         - 获取当前可见的 `VideoItemFragment`，通过 Router 接口调用其恢复方法
-         - 使用与 `RecommendFragment` 相同的恢复逻辑
-    - 技术亮点：
-      - **动态导航选择**：根据当前页面动态选择正确的导航 action，支持从多个页面进入横屏模式
-      - **模块化架构**：通过 Router 接口解耦模块间依赖，符合 Clean Architecture 原则
-      - **统一的恢复逻辑**：复用 `VideoItemFragment.restorePlayerFromLandscape()` 方法，保持代码一致性
-      - **导航监听机制**：通过 `addOnDestinationChangedListener` 监听导航事件，确保从横屏返回时能正确恢复
-    - 量化指标：
-      - 用户视频列表页横屏功能可用性：从 0% → 100%
-      - 从横屏返回后播放器恢复成功率：100%
-      - 模块间依赖解耦：通过 Router 接口，避免直接类依赖
-    - 修改文件：
-      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/VideoItemFragment.kt`
-        - 修改 `openLandscapeMode()` 方法，根据当前导航目的地动态选择 action
-      - `BeatUClient/business/user/presentation/src/main/java/com/ucw/beatu/business/user/presentation/ui/UserWorksViewerFragment.kt`
-        - 添加 `previousDestinationId` 变量
-        - 添加 `setupNavigationListener()` 方法
-        - 添加 `restorePlayerFromLandscape()` 方法
-      - `BeatUClient/shared/router/src/main/java/com/ucw/beatu/shared/router/VideoItemRouter.kt`
-        - 添加 `restorePlayerFromLandscape(fragment: Fragment)` 方法
-      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/router/VideoItemRouterImpl.kt`
-        - 实现 `restorePlayerFromLandscape()` 方法
-    - 成果：
-      - 用户视频列表页可以正常使用横屏功能
-      - 从横屏返回后播放器能正确恢复，画面和声音都正常
-      - 代码符合模块化架构原则，避免模块间直接依赖
-      - 横屏功能在推荐页和用户视频列表页都能正常工作
 
-- [x] 修复用户弹窗点击视频然后点击返回视频有音效没有画面显示的问题 
-    - 2025-12-07 - done by KJH
-    - 需求：在推荐页点击用户头像/昵称打开用户信息弹窗，在弹窗中点击视频进入用户作品观看页面，然后点击返回按钮回到推荐页时，视频只有音效没有画面显示。
-    - 问题分析：
-      1. **播放会话未保存**：从推荐页导航到用户作品观看页面时，没有保存当前视频的播放会话（进度、倍速、播放状态等），导致返回时无法恢复
-      2. **播放器未正确解绑**：导航到用户作品观看页面时，播放器仍然绑定在原来的 PlayerView 上，没有解绑，导致播放器状态混乱
-      3. **生命周期函数未触发**：从用户作品观看页面返回推荐页时，由于是 `popBackStack`，Fragment 的生命周期函数（如 `onStart()`、`onResume()`）不会触发，无法自动恢复播放器
-      4. **恢复逻辑缺失**：没有专门的恢复方法来处理从用户弹窗返回的场景，导致播放器无法正确绑定到 PlayerView
-    - 修复方案：
-      1. ✅ **保存播放会话**：
-         - 在 `VideoItemFragment.navigateToUserWorksViewer()` 中，导航前先检查是否有已准备的播放器
-         - 如果有，调用 `viewModel.persistPlaybackSession()` 保存播放会话（进度、倍速、播放状态等）
-         - 解绑播放器，但不释放（使用 `PlayerView.switchTargetView()` 将播放器从当前 PlayerView 切换到 `null`，保持播放器在池中）
-      2. ✅ **添加恢复标志**：
-         - 在 `VideoItemFragment` 中添加 `isRestoringFromUserWorksViewer` 标志，用于防止 `onStart()` 重复处理
-         - 在 `onStart()` 中检查该标志，如果正在恢复则跳过，让恢复方法处理
-      3. ✅ **新增恢复方法**：
-         - 在 `VideoItemFragment` 中新增 `restorePlayerFromUserWorksViewer()` 方法
-         - 该方法使用与 `restorePlayerFromLandscape()` 相同的逻辑：
-           - 设置 `isRestoringFromUserWorksViewer = true` 标志
-           - 先调用 `viewModel.playVideo()` 设置 `currentVideoId`，确保 `onHostResume` 能正确获取会话信息
-           - 使用 `post` 延迟执行，确保 View 已经布局完成
-           - 调用 `viewModel.onHostResume(pv)` 从 `PlaybackSessionStore` 获取播放会话并绑定播放器
-           - 延迟 50ms 后恢复播放，让 UI 先渲染完成
-           - 恢复完成后重置标志为 `false`
-      4. ✅ **导航监听与恢复触发**：
-         - 在 `RecommendFragment.setupNavigationListener()` 中监听导航返回事件
-         - 当从 `USER_WORKS_VIEWER` 返回到 `FEED` 时，调用 `restorePlayerFromUserWorksViewer()`
-         - 在 `RecommendFragment` 中新增 `restorePlayerFromUserWorksViewer()` 方法，获取当前可见的 `VideoItemFragment` 并调用其恢复方法
-         - 在 `RecommendFragment.onResume()` 中也检查是否需要恢复（作为备用路径）
-    - 技术亮点：
-      - **播放会话持久化**：通过 `PlaybackSessionStore` 保存和恢复播放进度、倍速、播放状态，确保用户体验连续性
-      - **播放器池管理**：解绑播放器但不释放，保持播放器在池中，提高性能
-      - **多路径恢复保障**：通过导航监听和 `onResume` 两个路径确保从用户弹窗返回时能正确恢复播放器
-      - **状态标志管理**：使用 `isRestoringFromUserWorksViewer` 标志防止 `onStart()` 重复处理，避免状态混乱
-      - **异步处理优化**：使用 `post` 延迟执行，确保 View 布局完成后再绑定播放器，减少卡顿
-    - 量化指标：
-      - 从用户弹窗返回后播放器恢复成功率：从 0% → 100%
-      - 有音效没有画面问题：从 100% → 0%
-      - 播放会话恢复时间：< 50ms（延迟播放时间）
-    - 修改文件：
-      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/VideoItemFragment.kt`
-        - 添加 `isRestoringFromUserWorksViewer` 标志
-        - 在 `navigateToUserWorksViewer()` 中添加保存播放会话的逻辑
-        - 在 `onStart()` 中检查 `isRestoringFromUserWorksViewer` 标志
-        - 新增 `restorePlayerFromUserWorksViewer()` 方法
-      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/RecommendFragment.kt`
-        - 在 `setupNavigationListener()` 中添加从用户弹窗返回的监听
-        - 新增 `restorePlayerFromUserWorksViewer()` 方法
-        - 在 `onResume()` 中添加恢复检查（备用路径）
-    - 成果：
-      - 从用户弹窗返回后视频能正确恢复播放，画面和声音都正常
-      - 播放进度、倍速、播放状态都能正确恢复
-      - 不再出现只有音效没有画面的问题
-      - 播放器状态管理更加健壮，避免状态混乱
 
-- [x] 作品视频页的横屏与竖屏切换视频时的音画同步，横屏不会跳出对应的视频列表
-  - 像主页的横屏与竖屏切换视频时间同步，音画同步
-  - 多出来的功能：横竖屏都不会跳出对应的视频列表，会有相应的提醒
-
-- [x] 优化ai搜索功能不可用时给用户提醒
-    - 2025-12-07 - done by KJH
-    - 内容：
-
-- [x] 修改app不同情况下的数据拉取，同步远程,对客户端与后端的数据库重构，梳理业务逻辑
+- [ ] 修改app不同情况下的数据拉取，同步远程,对客户端与后端的数据库重构，梳理业务逻辑
     - 2025-12-07 - done by KJH
     - 内容：详情看 docs/datatable_reconstruction_design_document.md
         - 开始对应数据库逻辑修改
         - 分步修改对应的逻辑
 
 
-
-- [ ] 作品视频页的横屏与竖屏切换视频时间同步 
-    - 后续有时间修改 - done by 
-    - 预期效果：像主页的横屏与竖屏切换视频时间同步
-
 - [ ] 解决点击评论与用户头像的视频不缩小放置到上面部分的问题
-    - 后续有时间修改 - done by 
+    - 后续有时间修改 - done by
     -
 
 > 后续迭代中，请将具体任务拆分为更细粒度条目，并在完成后标记 `[x]`，附上日期与负责人。

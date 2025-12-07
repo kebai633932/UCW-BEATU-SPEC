@@ -1,6 +1,7 @@
 package com.ucw.beatu.business.videofeed.presentation.ui
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,6 +17,10 @@ import com.ucw.beatu.business.videofeed.presentation.ui.FeedFragmentCallback
  * 顶部导航栏已提升到 MainActivity，由应用层统一管理
  */
 class FeedFragment : Fragment(), FeedFragmentCallback {
+
+    companion object {
+        private const val TAG = "FeedFragment"
+    }
 
     private lateinit var viewPager: ViewPager2
     private var currentPage = 1 // 默认显示推荐页面（索引1）
@@ -150,6 +155,22 @@ class FeedFragment : Fragment(), FeedFragmentCallback {
     }
     
     /**
+     * 刷新推荐页面
+     */
+    fun refreshRecommendFragment() {
+        val fragment = recommendFragment ?: childFragmentManager.fragments
+            .filterIsInstance<RecommendFragment>()
+            .firstOrNull()
+            ?.also { recommendFragment = it }
+        if (fragment != null) {
+            Log.d(TAG, "refreshRecommendFragment: calling refreshVideoList")
+            fragment.refreshVideoList()
+        } else {
+            Log.w(TAG, "refreshRecommendFragment: RecommendFragment not found")
+        }
+    }
+    
+    /**
      * ViewPager2的适配器
      */
     private inner class TabPagerAdapter(fragmentActivity: FragmentActivity) : FragmentStateAdapter(fragmentActivity) {
@@ -178,5 +199,7 @@ class FeedFragment : Fragment(), FeedFragmentCallback {
             recommendTabX: Float,
             recommendTabY: Float
         )
+        fun hideRecommendText()
+        fun showRecommendText()
     }
 }

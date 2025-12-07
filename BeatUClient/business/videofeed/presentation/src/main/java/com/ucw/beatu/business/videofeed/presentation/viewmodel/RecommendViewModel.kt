@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlin.random.Random
 import javax.inject.Inject
 
 data class RecommendUiState(
@@ -96,17 +97,47 @@ class RecommendViewModel @Inject constructor(
                             val videos = result.data.map { it.toVideoItem() }
                             // 记录数据来源
                             val source = result.metadata["source"] as? String ?: "unknown"
-                            videos.forEach { video ->
-                                videoSourceMap[video.id] = source
-                                android.util.Log.d("RecommendViewModel", 
-                                    "loadVideoList: 视频 ${video.id} 数据来源=$source, authorAvatar=${video.authorAvatar ?: "null"}"
-                                )
+                            
+                            // 对视频列表进行随机打乱，确保每次打开app顺序不同
+                            // 无论是本地缓存还是远程数据，都应该打乱，确保每次打开app顺序不同
+                            val currentList = _uiState.value.videoList
+                            val isFirstLoad = currentList.isEmpty()
+                            val isReplacingLocalCache = !isFirstLoad && 
+                                                       currentList.any { videoSourceMap[it.id] == "local" } && 
+                                                       source == "remote"
+                            
+                            // 打乱条件：
+                            // 1. 首次加载时，无论是本地缓存还是远程数据都打乱
+                            // 2. 或者当前列表是本地缓存数据，现在收到远程数据（需要替换并打乱）
+                            val shouldShuffle = isFirstLoad || isReplacingLocalCache
+                            
+                            val finalVideos = if (shouldShuffle) {
+                                // 使用当前时间戳作为随机种子，确保每次打开app顺序不同
+                                val shuffled = videos.shuffled(Random(System.currentTimeMillis()))
+                                android.util.Log.d("RecommendViewModel", "loadVideoList: Shuffled ${videos.size} videos using timestamp seed, source=$source, isFirstLoad=$isFirstLoad, isReplacingLocalCache=$isReplacingLocalCache")
+                                shuffled
+                            } else {
+                                videos
                             }
+                            
+                            // 记录数据来源（在打乱后，这样日志顺序和实际播放顺序一致）
+                            finalVideos.forEach { video ->
+                                videoSourceMap[video.id] = source
+                            }
+                            
+                            // 打印打乱后的顺序（用于调试）
+                            if (shouldShuffle) {
+                                android.util.Log.d("RecommendViewModel", "loadVideoList: Final shuffled order:")
+                                finalVideos.forEachIndexed { index, video ->
+                                    android.util.Log.d("RecommendViewModel", "  [$index] ${video.id} (source=$source)")
+                            }
+                            }
+                            
                             // 如果第一页数量不足 pageSize，可以直接认为后端数据已经加载完
-                            val hasLoadedAll = videos.size < pageSize
-                            android.util.Log.d("RecommendViewModel", "loadVideoList: Success, loaded ${videos.size} videos, source=$source")
+                            val hasLoadedAll = finalVideos.size < pageSize
+                            android.util.Log.d("RecommendViewModel", "loadVideoList: Success, loaded ${finalVideos.size} videos, source=$source, shuffled=$shouldShuffle")
                             _uiState.value = _uiState.value.copy(
-                                videoList = videos,
+                                videoList = finalVideos,
                                 isLoading = false,
                                 error = null,
                                 hasLoadedAllFromBackend = hasLoadedAll
@@ -130,44 +161,110 @@ class RecommendViewModel @Inject constructor(
 
     /**
      * 刷新视频列表（下拉刷新）
+     * 获取最新 5-10 条视频，插入到列表顶部
      */
     fun refreshVideoList() {
+        android.util.Log.d("RecommendViewModel", "refreshVideoList: called")
         viewModelScope.launch {
-            currentPage = 1
+            // 刷新时获取 5-10 条视频（随机数量，增加变化性）
+            val refreshCount = (5..10).random()
+            android.util.Log.d("RecommendViewModel", "refreshVideoList: setting isRefreshing=true, refreshCount=$refreshCount")
             _uiState.value = _uiState.value.copy(isRefreshing = true, error = null)
             
-            getFeedUseCase(currentPage, pageSize)
+            getFeedUseCase(1, refreshCount)
                 .catch { e ->
+                    android.util.Log.e("RecommendViewModel", "refreshVideoList: error caught", e)
                     _uiState.value = _uiState.value.copy(
                         isRefreshing = false,
                         error = e.message ?: "刷新失败"
                     )
                 }
                 .collect { result ->
+                    android.util.Log.d("RecommendViewModel", "refreshVideoList: received result type=${result.javaClass.simpleName}")
                     when (result) {
                         is AppResult.Loading -> {
+                            android.util.Log.d("RecommendViewModel", "refreshVideoList: Loading state")
                             // Loading状态已在开始时设置
                         }
                         is AppResult.Success -> {
-                            val videos = result.data.map { it.toVideoItem() }
+                            val newVideos = result.data.map { it.toVideoItem() }
                             // 记录数据来源
                             val source = result.metadata["source"] as? String ?: "unknown"
-                            videos.forEach { video ->
+                            newVideos.forEach { video ->
                                 videoSourceMap[video.id] = source
                                 android.util.Log.d("RecommendViewModel", 
                                     "refreshVideoList: 视频 ${video.id} 数据来源=$source, authorAvatar=${video.authorAvatar ?: "null"}"
                                 )
                             }
-                            val hasLoadedAll = videos.size < pageSize
-                            android.util.Log.d("RecommendViewModel", "refreshVideoList: Success, loaded ${videos.size} videos, source=$source")
+                            
+                            // 刷新时，只在收到远程数据时才完成刷新
+                            // 本地缓存数据不应该结束刷新状态
+                            val isRemoteData = source == "remote"
+                            android.util.Log.d("RecommendViewModel", "refreshVideoList: Success, loaded ${newVideos.size} videos, source=$source, isRemoteData=$isRemoteData")
+                            
+                            if (isRemoteData) {
+                                // 远程数据到达，将新视频插入到列表顶部
+                                val currentList = _uiState.value.videoList.toMutableList()
+                                
+                                // 去重：移除已存在的视频（根据 ID）
+                                val existingIds = currentList.map { it.id }.toSet()
+                                val uniqueNewVideos = newVideos.filter { it.id !in existingIds }
+                                
+                                if (uniqueNewVideos.isNotEmpty()) {
+                                    // 将新视频插入到列表顶部
+                                    currentList.addAll(0, uniqueNewVideos)
+                                    android.util.Log.d("RecommendViewModel", "refreshVideoList: Inserted ${uniqueNewVideos.size} new videos at top, total=${currentList.size}")
+                                    
+                                    // 刷新后重新打乱整个列表，确保顺序变化
+                                    val shuffledList = currentList.shuffled(Random(System.currentTimeMillis()))
+                                    android.util.Log.d("RecommendViewModel", "refreshVideoList: Shuffled entire list after refresh")
+                                    
+                                    // 记录数据来源（在打乱后）
+                                    shuffledList.forEach { video ->
+                                        videoSourceMap[video.id] = source
+                                    }
+                                    
+                                    // 打印打乱后的顺序（用于调试）
+                                    android.util.Log.d("RecommendViewModel", "refreshVideoList: Final shuffled order:")
+                                    shuffledList.forEachIndexed { index, video ->
+                                        android.util.Log.d("RecommendViewModel", "  [$index] ${video.id}")
+                                    }
+                                    
+                                    // 刷新完成
+                                    android.util.Log.d("RecommendViewModel", "refreshVideoList: Remote data received, setting isRefreshing=false")
+                                    _uiState.value = _uiState.value.copy(
+                                        videoList = shuffledList,
+                                        isRefreshing = false,
+                                        error = null,
+                                        // 刷新不影响 hasLoadedAllFromBackend 状态
+                                        hasLoadedAllFromBackend = _uiState.value.hasLoadedAllFromBackend
+                                    )
+                                } else {
+                                    android.util.Log.d("RecommendViewModel", "refreshVideoList: No new videos to insert (all duplicates)")
+                                    // 即使没有新视频，也重新打乱列表
+                                    val shuffledList = currentList.shuffled(Random(System.currentTimeMillis()))
+                                    android.util.Log.d("RecommendViewModel", "refreshVideoList: Shuffled list even though no new videos")
+                                    
+                                    // 打印打乱后的顺序（用于调试）
+                                    android.util.Log.d("RecommendViewModel", "refreshVideoList: Final shuffled order:")
+                                    shuffledList.forEachIndexed { index, video ->
+                                        android.util.Log.d("RecommendViewModel", "  [$index] ${video.id}")
+                                    }
+                                    
                             _uiState.value = _uiState.value.copy(
-                                videoList = videos,
+                                        videoList = shuffledList,
                                 isRefreshing = false,
                                 error = null,
-                                hasLoadedAllFromBackend = hasLoadedAll
+                                        hasLoadedAllFromBackend = _uiState.value.hasLoadedAllFromBackend
                             )
+                                }
+                            } else {
+                                // 本地缓存数据，暂时不更新列表，等待远程数据
+                                android.util.Log.d("RecommendViewModel", "refreshVideoList: Local cache data, waiting for remote data")
+                            }
                         }
                         is AppResult.Error -> {
+                            android.util.Log.e("RecommendViewModel", "refreshVideoList: Error, setting isRefreshing=false")
                             _uiState.value = _uiState.value.copy(
                                 isRefreshing = false,
                                 error = result.message ?: result.throwable.message ?: "刷新失败"
@@ -244,10 +341,15 @@ class RecommendViewModel @Inject constructor(
                                 }
                                 
                                 currentList.addAll(uniqueNewVideos)
+                                
+                                // 加载更多后，重新打乱整个列表，确保顺序变化
+                                val shuffledList = currentList.shuffled(Random(System.currentTimeMillis()))
+                                android.util.Log.d("RecommendViewModel", "loadMoreVideos: Shuffled entire list after loading more")
+                                
                                 val hasLoadedAll = moreVideos.size < pageSize
                                 android.util.Log.d("RecommendViewModel", "loadMoreVideos: Success, loaded ${uniqueNewVideos.size} new videos, source=$source")
                                 _uiState.value = _uiState.value.copy(
-                                    videoList = currentList,
+                                    videoList = shuffledList,
                                     error = null,
                                     hasLoadedAllFromBackend = hasLoadedAll
                                 )

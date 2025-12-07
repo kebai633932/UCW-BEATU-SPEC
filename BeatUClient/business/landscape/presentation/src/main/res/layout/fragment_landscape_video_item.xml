@@ -17,12 +17,12 @@
         app:surface_type="texture_view"
         app:use_controller="false" />
 
-    <!-- 横屏控制面板（半透明覆盖层，可显示/隐藏） -->
+    <!-- 横屏控制面板（透明覆盖层，可显示/隐藏） -->
     <FrameLayout
         android:id="@+id/control_panel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#80000000"
+        android:background="@android:color/transparent"
         android:visibility="gone">
 
         <!-- 顶部控制栏：右上角评论和分享（无需重复返回按钮） -->
