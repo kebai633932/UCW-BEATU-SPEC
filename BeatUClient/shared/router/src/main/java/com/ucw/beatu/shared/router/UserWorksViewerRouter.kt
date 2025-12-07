@@ -33,5 +33,15 @@ interface UserWorksViewerRouter {
      * @return 当前视频索引，如果不在 UserWorksViewerFragment 中，返回 null
      */
     fun getCurrentVideoIndex(): Int?
+    
+    /**
+     * 通知进入横屏模式（供 VideoItemFragment 调用，确保按钮横屏和自然横屏逻辑一致）
+     */
+    fun notifyEnterLandscapeMode()
+    
+    /**
+     * 通知退出横屏模式（供 VideoItemFragment 或导航监听器调用，确保按钮退出和自然横屏退出逻辑一致）
+     */
+    fun notifyExitLandscapeMode()
 }
 

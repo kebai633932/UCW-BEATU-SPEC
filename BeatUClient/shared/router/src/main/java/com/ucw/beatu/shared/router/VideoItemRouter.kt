@@ -35,5 +35,13 @@ interface VideoItemRouter {
      * @param fragment Fragment 实例
      */
     fun restorePlayerFromLandscape(fragment: Fragment)
+    
+    /**
+     * 打开横屏模式（支持传递视频列表，用于作品视频页）
+     * @param fragment Fragment 实例
+     * @param videoList 视频列表（可选，如果提供则横屏页面使用固定列表模式）
+     * @param currentIndex 当前视频索引（可选，与 videoList 一起使用）
+     */
+    fun openLandscapeMode(fragment: Fragment, videoList: List<VideoItem>? = null, currentIndex: Int? = null)
 }
 

@@ -31,5 +31,11 @@ class VideoItemRouterImpl : VideoItemRouter {
             fragment.restorePlayerFromLandscape()
         }
     }
+    
+    override fun openLandscapeMode(fragment: Fragment, videoList: List<VideoItem>?, currentIndex: Int?) {
+        if (fragment is VideoItemFragment) {
+            fragment.openLandscapeMode(videoList, currentIndex)
+        }
+    }
 }
 

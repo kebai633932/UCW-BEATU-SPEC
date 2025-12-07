@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import androidx.core.os.BundleCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.viewModels
+import java.util.ArrayList
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -383,11 +384,11 @@ class VideoItemFragment : BaseFeedItemFragment() {
                     } else {
                         Log.d(TAG, "onStart: 检测到已有播放器或已准备，重新绑定")
                     }
-                    reattachPlayer()
-                } else {
-                    // 首次加载 - 只准备播放器，不立即播放
+                reattachPlayer()
+            } else {
+                // 首次加载 - 只准备播放器，不立即播放
                     Log.d(TAG, "onStart: 首次加载，准备播放器")
-                    preparePlayerForFirstTime()
+                preparePlayerForFirstTime()
                 }
             }
             // ✅ 修复：不在这里立即播放，等待 Fragment 真正可见时再播放（由 handlePageSelected() 触发）
@@ -501,9 +502,9 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 preparePlayerForFirstTime()
             } else {
                 Log.d(TAG, "startPlaybackIfNeeded: player already prepared and attached, resuming")
-                // Fragment 已可见，确保播放状态恢复
+            // Fragment 已可见，确保播放状态恢复
                 // 从横屏返回时，即使会话中 playWhenReady=false，如果 Fragment 可见也应该播放
-                viewModel.resume()
+            viewModel.resume()
             }
         }
     }
@@ -571,9 +572,9 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 }
                 // 直接调用 preparePlayer，它会检查是否有会话并正确处理
                 // preparePlayer 内部会调用 playVideo 来设置状态，但不会释放播放器（因为播放器在池中）
-                viewModel.preparePlayer(item.id, item.videoUrl, pv)
-                hasPreparedPlayer = true
-                Log.d(TAG, "reattachPlayer: hasPreparedPlayer=$hasPreparedPlayer, playerView.player=${pv.player}")
+        viewModel.preparePlayer(item.id, item.videoUrl, pv)
+        hasPreparedPlayer = true
+        Log.d(TAG, "reattachPlayer: hasPreparedPlayer=$hasPreparedPlayer, playerView.player=${pv.player}")
             } else {
                 Log.w(TAG, "reattachPlayer: Fragment not added after post")
             }
@@ -615,7 +616,12 @@ class VideoItemFragment : BaseFeedItemFragment() {
         openLandscapeMode()
     }
 
-    fun openLandscapeMode() {
+    /**
+     * 打开横屏模式
+     * @param videoList 视频列表（可选，如果提供则横屏页面使用固定列表模式，不会跳出列表）
+     * @param currentIndex 当前视频索引（可选，与 videoList 一起使用）
+     */
+    fun openLandscapeMode(videoList: List<com.ucw.beatu.shared.common.model.VideoItem>? = null, currentIndex: Int? = null) {
         val navController = findParentNavController()
         if (navController == null) {
             Log.e(TAG, "NavController not found, cannot open landscape mode")
@@ -626,13 +632,37 @@ class VideoItemFragment : BaseFeedItemFragment() {
             return
         }
         
-        // ✅ 对齐逻辑：通知父 Fragment（RecommendFragment）进入横屏模式，确保按钮横屏和自然横屏逻辑一致
+        // ✅ 对齐逻辑：通知父 Fragment 进入横屏模式，确保按钮横屏和自然横屏逻辑一致
         (parentFragment as? RecommendFragment)?.notifyEnterLandscapeMode()
         
-        // 优化：先保存会话和切换播放器（这些操作很快）
-        viewModel.persistPlaybackSession()
+        // ✅ 修复：如果从 UserWorksViewerFragment 调用，也通知它进入横屏模式
+        val userWorksRouter = RouterRegistry.getUserWorksViewerRouter()
+        if (userWorksRouter != null) {
+            Log.d(TAG, "openLandscapeMode: 通知 UserWorksViewerFragment 进入横屏模式")
+            userWorksRouter.notifyEnterLandscapeMode()
+        } else {
+            Log.d(TAG, "openLandscapeMode: UserWorksViewerRouter 未注册，可能不在 UserWorksViewerFragment 中")
+        }
+        
+        // ✅ 修复：确保在保存会话时获取最新的播放进度
+        // 先暂停播放器，确保进度不会继续更新，然后保存会话
         viewModel.mediaPlayer()?.let { player ->
+            // 获取最新的播放进度（在暂停前）
+            val currentPosition = player.currentPosition
+            Log.d(TAG, "openLandscapeMode: 保存播放会话，当前播放位置=${currentPosition}ms")
+            
+            // 保存会话（会获取最新的播放进度）
+            val session = viewModel.persistPlaybackSession()
+            if (session != null) {
+                Log.d(TAG, "openLandscapeMode: 播放会话已保存，视频ID=${session.videoId}，位置=${session.positionMs}ms，是否准备播放=${session.playWhenReady}")
+            } else {
+                Log.w(TAG, "openLandscapeMode: 播放会话保存失败，可能播放器未准备好")
+            }
+            
+            // 解绑播放器，但不释放（保持播放器在池中）
             PlayerView.switchTargetView(player, playerView, null)
+        } ?: run {
+            Log.w(TAG, "openLandscapeMode: 播放器为null，无法保存会话")
         }
 
         // ✅ 修复：根据当前导航目的地动态选择正确的 action
@@ -654,6 +684,29 @@ class VideoItemFragment : BaseFeedItemFragment() {
             return
         }
 
+        // ✅ 修复：如果从 UserWorksViewerFragment 调用且未提供视频列表，尝试从 Router 获取
+        val finalVideoList = videoList ?: run {
+            if (currentDestId == userWorksViewerDestId) {
+                val userWorksRouter = RouterRegistry.getUserWorksViewerRouter()
+                userWorksRouter?.getCurrentVideoList()?.also {
+                    Log.d(TAG, "openLandscapeMode: 从 UserWorksViewerRouter 获取视频列表，数量=${it.size}")
+                }
+            } else {
+                null
+            }
+        }
+        
+        val finalCurrentIndex = currentIndex ?: run {
+            if (currentDestId == userWorksViewerDestId) {
+                val userWorksRouter = RouterRegistry.getUserWorksViewerRouter()
+                userWorksRouter?.getCurrentVideoIndex()?.also {
+                    Log.d(TAG, "openLandscapeMode: 从 UserWorksViewerRouter 获取当前索引=$it")
+                }
+            } else {
+                null
+            }
+        }
+
         // 优化：预先构建参数
         val args = bundleOf(
             LandscapeLaunchContract.EXTRA_VIDEO_ID to item.id,
@@ -665,17 +718,28 @@ class VideoItemFragment : BaseFeedItemFragment() {
             LandscapeLaunchContract.EXTRA_VIDEO_FAVORITE to item.favoriteCount,
             LandscapeLaunchContract.EXTRA_VIDEO_SHARE to item.shareCount
         )
+        
+        // ✅ 新增：如果提供了视频列表，传递给横屏页面（用于固定列表模式，防止跳出列表）
+        if (finalVideoList != null && finalVideoList.isNotEmpty()) {
+            val videoListParcelable = ArrayList(finalVideoList)
+            args.putParcelableArrayList(LandscapeLaunchContract.EXTRA_VIDEO_LIST, videoListParcelable)
+            val index = finalCurrentIndex ?: finalVideoList.indexOfFirst { it.id == item.id }.let { 
+                if (it == -1) 0 else it 
+            }
+            args.putInt(LandscapeLaunchContract.EXTRA_CURRENT_INDEX, index.coerceIn(0, finalVideoList.lastIndex))
+            Log.d(TAG, "openLandscapeMode: 传递视频列表到横屏页面，数量=${finalVideoList.size}，当前索引=$index")
+        }
 
         navigatingToLandscape = true
         
         // 优化：使用post延迟导航，让播放器切换先完成，减少卡顿
         view?.post {
-            runCatching { navController.navigate(actionId, args) }
-                .onFailure {
-                    navigatingToLandscape = false
+        runCatching { navController.navigate(actionId, args) }
+            .onFailure {
+                navigatingToLandscape = false
                     // ✅ 对齐逻辑：如果导航失败，需要通知父 Fragment 退出横屏模式
                     (parentFragment as? RecommendFragment)?.notifyExitLandscapeMode()
-                    Log.e(TAG, "Failed to navigate to landscape fragment", it)
+                Log.e(TAG, "Failed to navigate to landscape fragment", it)
                 }
         }
     }
@@ -702,16 +766,17 @@ class VideoItemFragment : BaseFeedItemFragment() {
             return
         }
         
-        Log.d(TAG, "restorePlayerFromLandscape: 恢复播放器，videoId=${item.id}")
+        Log.d(TAG, "restorePlayerFromLandscape: 恢复播放器，videoId=${item.id}, videoUrl=${item.videoUrl}")
         
         // 设置标志，防止 onStart 重复处理
         isRestoringFromLandscape = true
 
-        // 先设置currentVideoId，确保onHostResume能正确获取会话信息
-        // 注意：必须先调用playVideo设置currentVideoId，否则onHostResume会返回
+        // ✅ 修复：先设置currentVideoId，确保onHostResume能正确获取会话信息
+        // 注意：playVideo 是异步的，需要等待 currentVideoId 设置完成后再调用 onHostResume
+        Log.d(TAG, "restorePlayerFromLandscape: 调用 playVideo，videoId=${item.id}")
         viewModel.playVideo(item.id, item.videoUrl)
 
-        // 优化：使用post延迟执行，确保View已经布局完成，减少卡顿
+        // 优化：使用post延迟执行，确保View已经布局完成，并等待 playVideo 完成
         pv.post {
             if (!isAdded) {
                 Log.w(TAG, "restorePlayerFromLandscape: Fragment not added after post")
@@ -719,20 +784,55 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 return@post
             }
             
-            // 使用onHostResume方法，它会检查是否有播放会话并恢复
-            // onHostResume会从PlaybackSessionStore中获取会话信息，并绑定播放器到view
-            viewModel.onHostResume(pv)
-            hasPreparedPlayer = true
-            Log.d(TAG, "restorePlayerFromLandscape: 播放器已恢复，playerView.player=${pv.player}")
-            
-            // 优化：延迟恢复播放，让UI先渲染完成
-            pv.postDelayed({
-                if (isAdded && isViewVisibleOnScreen()) {
-                    viewModel.resume()
+            // ✅ 修复：等待 playVideo 完成（currentVideoId 设置完成）
+            // 使用 viewLifecycleOwner.lifecycleScope 确保在正确的生命周期中执行
+            viewLifecycleOwner.lifecycleScope.launch {
+                // 等待 playVideo 完成：轮询检查 currentVideoId 是否已设置
+                var retryCount = 0
+                val maxRetries = 50 // 最多等待 500ms (50 * 10ms)
+                while (retryCount < maxRetries) {
+                    val currentVideoId = viewModel.uiState.value.currentVideoId
+                    if (currentVideoId == item.id) {
+                        Log.d(TAG, "restorePlayerFromLandscape: playVideo 完成，currentVideoId=$currentVideoId，重试次数=$retryCount")
+                        break
+                    }
+                    delay(10)
+                    retryCount++
                 }
-                // 恢复完成后，重置标志
-                isRestoringFromLandscape = false
-            }, 50) // 延迟50ms，让UI先渲染
+                
+                // 再次检查 Fragment 是否仍然有效
+                if (!isAdded) {
+                    Log.w(TAG, "restorePlayerFromLandscape: Fragment not added after delay")
+                    isRestoringFromLandscape = false
+                    return@launch
+                }
+                
+                // 验证 currentVideoId 是否已设置
+                val finalVideoId = viewModel.uiState.value.currentVideoId
+                if (finalVideoId != item.id) {
+                    Log.w(TAG, "restorePlayerFromLandscape: ⚠️ currentVideoId 未正确设置，期望=${item.id}，实际=$finalVideoId，继续尝试恢复")
+                }
+                
+                // 使用onHostResume方法，它会检查是否有播放会话并恢复
+                // onHostResume会从PlaybackSessionStore中获取会话信息，并绑定播放器到view
+                // ✅ 修复：onHostResume 会应用会话，包括位置和播放状态，不需要额外调用 resume()
+                Log.d(TAG, "restorePlayerFromLandscape: 调用 onHostResume，videoId=${item.id}")
+                viewModel.onHostResume(pv)
+                hasPreparedPlayer = true
+                val restoredPosition = viewModel.mediaPlayer()?.currentPosition ?: 0
+                Log.d(TAG, "restorePlayerFromLandscape: 播放器已恢复，playerView.player=${pv.player}, currentPosition=${restoredPosition}ms")
+                
+                // ✅ 修复：不需要额外调用 resume()，因为 applyPlaybackSession 已经根据会话的 playWhenReady 设置了播放状态
+                // 如果会话中 playWhenReady = true，applyPlaybackSession 会调用 player.play()
+                // 如果会话中 playWhenReady = false，applyPlaybackSession 会调用 player.pause()
+                // 延迟重置标志，确保会话恢复完成
+                pv.postDelayed({
+                    // 恢复完成后，重置标志
+                    isRestoringFromLandscape = false
+                    val finalPosition = viewModel.mediaPlayer()?.currentPosition ?: 0
+                    Log.d(TAG, "restorePlayerFromLandscape: 恢复完成，当前播放位置=${finalPosition}ms")
+                }, 50) // 延迟50ms，让UI先渲染
+            }
         }
     }
 
@@ -790,7 +890,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 // 恢复完成后，重置标志
                 isRestoringFromUserWorksViewer = false
             }, 50) // 延迟50ms，让UI先渲染
-        }
+            }
     }
 
     private fun findParentNavController(): NavController? {

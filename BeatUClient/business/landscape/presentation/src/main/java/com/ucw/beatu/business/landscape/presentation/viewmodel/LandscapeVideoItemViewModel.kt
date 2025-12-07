@@ -59,6 +59,7 @@ class LandscapeVideoItemViewModel @Inject constructor(
     private var progressUpdateJob: Job? = null
     private var playerListener: VideoPlayer.Listener? = null
     private var handoffFromPortrait = false
+    private var pendingSession: PlaybackSession? = null // 保存会话信息，在 onReady 中使用
 
     fun bindVideoMeta(videoItem: VideoItem) {
         _controlsState.value = LandscapeControlsState(
@@ -130,14 +131,36 @@ class LandscapeVideoItemViewModel @Inject constructor(
                 val listener = object : VideoPlayer.Listener {
                     override fun onReady(videoId: String) {
                         val startUp = startUpStopwatch.elapsedMillis()
+                        
+                        // ✅ 修复：如果是从竖屏切换过来的，需要确保位置和播放状态正确
+                        val session = pendingSession
+                        val shouldPlay = if (handoffFromPortrait && session != null) {
+                            // 从竖屏切换过来，使用会话中的播放状态
+                            AppLogger.d(TAG, "onReady: 从竖屏切换过来，再次确认位置=${session.positionMs}ms，是否准备播放=${session.playWhenReady}")
+                            // 再次确认位置（因为可能在 prepare 过程中位置发生了变化）
+                            player.seekTo(session.positionMs)
+                            session.playWhenReady
+                        } else {
+                            true
+                        }
+                        
+                        // 清除会话信息（已经使用完毕）
+                        pendingSession = null
+                        
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             showPlaceholder = false,
-                            isPlaying = true,
+                            isPlaying = shouldPlay,
                             durationMs = player.player.duration.takeIf { it > 0 } ?: 0L,
                             startUpTimeMs = startUp
                         )
-                        AppLogger.d(TAG, "Landscape video ready startUp=${startUp}ms")
+                        AppLogger.d(TAG, "Landscape video ready startUp=${startUp}ms, shouldPlay=$shouldPlay, handoffFromPortrait=$handoffFromPortrait, currentPosition=${player.player.currentPosition}ms")
+                        
+                        // 如果应该播放，确保播放器正在播放
+                        if (shouldPlay) {
+                            player.play()
+                        }
+                        
                         startProgressUpdates()
                     }
 
@@ -159,11 +182,14 @@ class LandscapeVideoItemViewModel @Inject constructor(
                 playerListener = listener
 
                 player.attach(playerView)
-                val pendingSession = playbackSessionStore.consume(videoId)
-                handoffFromPortrait = pendingSession != null
-                if (pendingSession != null) {
-                    applyPlaybackSession(player, pendingSession)
+                val session = playbackSessionStore.consume(videoId)
+                handoffFromPortrait = session != null
+                pendingSession = session // 保存会话信息，在 onReady 中使用
+                if (session != null) {
+                    AppLogger.d(TAG, "preparePlayer: 检测到播放会话，视频ID=${session.videoId}，位置=${session.positionMs}ms，倍速=${session.speed}，是否准备播放=${session.playWhenReady}")
+                    applyPlaybackSession(player, session)
                 } else {
+                    AppLogger.d(TAG, "preparePlayer: 未检测到播放会话，从头开始播放，视频ID=$videoId")
                     player.prepare(source)
                     player.play()
                 }
@@ -360,46 +386,86 @@ class LandscapeVideoItemViewModel @Inject constructor(
         val videoUrl = currentVideoUrl ?: return null
         val player = currentPlayer ?: return null
         val mediaPlayer = player.player
+        
+        // ✅ 修复：确保获取最新的播放进度
+        val currentPosition = mediaPlayer.currentPosition
+        val speed = mediaPlayer.playbackParameters.speed
+        val playWhenReady = mediaPlayer.playWhenReady
+        
+        AppLogger.d(TAG, "snapshotPlayback: 保存播放会话，视频ID=$videoId，位置=${currentPosition}ms，倍速=$speed，是否准备播放=$playWhenReady")
+        
         return PlaybackSession(
             videoId = videoId,
             videoUrl = videoUrl,
-            positionMs = mediaPlayer.currentPosition,
-            speed = mediaPlayer.playbackParameters.speed,
-            playWhenReady = mediaPlayer.playWhenReady
+            positionMs = currentPosition,
+            speed = speed,
+            playWhenReady = playWhenReady
         )
     }
 
     fun mediaPlayer(): Player? = currentPlayer?.player
 
     private fun applyPlaybackSession(player: VideoPlayer, session: PlaybackSession) {
+        AppLogger.d(TAG, "applyPlaybackSession: 开始应用播放会话，视频ID=${session.videoId}，位置=${session.positionMs}ms，倍速=${session.speed}，是否准备播放=${session.playWhenReady}")
+        
         // ✅ 添加：检查播放器当前的内容是否匹配会话的视频ID
         val currentMediaItem = player.player.currentMediaItem
         val currentTag = currentMediaItem?.localConfiguration?.tag as? String
-        if (currentTag != null && currentTag != session.videoId) {
+        val needsPrepare = if (currentTag != null && currentTag != session.videoId) {
             AppLogger.w(TAG, "applyPlaybackSession: 播放器当前播放的视频ID=$currentTag 与会话视频ID=${session.videoId} 不匹配，需要重新准备")
             // 停止当前播放并清除内容
             player.pause()
             player.player.stop()
             player.player.clearMediaItems()
+            true
+        } else {
+            currentMediaItem == null
         }
         
-        if (player.player.currentMediaItem == null) {
-            player.prepare(VideoSource(session.videoId, session.videoUrl))
-        }
-        player.seekTo(session.positionMs)
-        player.setSpeed(session.speed)
-        if (session.playWhenReady) {
-            player.play()
-        } else {
+        // ✅ 修复：如果播放器已经有正确的媒体项，先暂停确保状态正确
+        if (!needsPrepare && currentMediaItem != null) {
+            AppLogger.d(TAG, "applyPlaybackSession: 播放器已有正确的媒体项，先暂停确保状态正确")
             player.pause()
         }
+        
+        if (needsPrepare) {
+            AppLogger.d(TAG, "applyPlaybackSession: 播放器没有媒体项，准备新的媒体项")
+            player.prepare(VideoSource(session.videoId, session.videoUrl))
+        }
+        
+        // ✅ 修复：设置倍速（在 seekTo 之前设置，确保跳转时使用正确的倍速）
+        player.setSpeed(session.speed)
+        
+        // ✅ 修复：确保在应用会话时，先 seek 到正确的位置
+        // ExoPlayer 的 seekTo 可以在 prepare 之前调用，会在准备好后自动跳转
+        AppLogger.d(TAG, "applyPlaybackSession: 跳转到位置=${session.positionMs}ms")
+        player.seekTo(session.positionMs)
+        
+        // 更新 UI 状态
         _uiState.value = _uiState.value.copy(
-            isLoading = false,
+            isLoading = needsPrepare,
             showPlaceholder = false,
-            isPlaying = session.playWhenReady,
+            isPlaying = session.playWhenReady && !needsPrepare, // 如果需要准备，先不播放
             currentPositionMs = session.positionMs,
             durationMs = player.player.duration.takeIf { it > 0 } ?: _uiState.value.durationMs
         )
+        
+        // 设置播放状态（如果需要准备，会在 onReady 中处理）
+        if (!needsPrepare) {
+            if (session.playWhenReady) {
+                AppLogger.d(TAG, "applyPlaybackSession: 恢复播放")
+                player.play()
+            } else {
+                AppLogger.d(TAG, "applyPlaybackSession: 保持暂停状态")
+                player.pause()
+            }
+        } else {
+            // 如果需要准备，保存播放状态，在 onReady 中恢复
+            AppLogger.d(TAG, "applyPlaybackSession: 等待播放器准备好后再恢复播放状态")
+            // 在 listener 的 onReady 中会处理播放状态
+        }
+        
+        AppLogger.d(TAG, "applyPlaybackSession: 播放会话已应用，当前播放位置=${player.player.currentPosition}ms，播放状态=${player.player.playbackState}")
     }
 
     fun isHandoffFromPortrait(): Boolean = handoffFromPortrait

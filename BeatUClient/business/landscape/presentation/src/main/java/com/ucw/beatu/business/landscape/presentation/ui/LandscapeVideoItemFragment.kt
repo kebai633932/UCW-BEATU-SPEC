@@ -1066,10 +1066,26 @@ class LandscapeVideoItemFragment : Fragment() {
      * 供 Activity 在退出前调用，先保存进度并解绑 Surface，返回竖屏时可无缝继续。
      */
     fun prepareForExit() {
-        Log.d(TAG, "prepareForExit: videoId=${viewModel.uiState.value.currentVideoId}")
-        viewModel.persistPlaybackSession()
+        val videoId = viewModel.uiState.value.currentVideoId
+        Log.d(TAG, "prepareForExit: videoId=$videoId")
+        
+        // ✅ 修复：确保在保存会话时获取最新的播放进度
         viewModel.mediaPlayer()?.let { player ->
+            val currentPosition = player.currentPosition
+            Log.d(TAG, "prepareForExit: 保存播放会话，当前播放位置=${currentPosition}ms")
+            
+            // 保存会话（会获取最新的播放进度）
+            val session = viewModel.persistPlaybackSession()
+            if (session != null) {
+                Log.d(TAG, "prepareForExit: 播放会话已保存，视频ID=${session.videoId}，位置=${session.positionMs}ms，是否准备播放=${session.playWhenReady}")
+            } else {
+                Log.w(TAG, "prepareForExit: 播放会话保存失败，可能播放器未准备好")
+            }
+            
+            // 解绑播放器，但不释放（保持播放器在池中）
             PlayerView.switchTargetView(player, playerView, null)
+        } ?: run {
+            Log.w(TAG, "prepareForExit: 播放器为null，无法保存会话")
         }
     }
 }

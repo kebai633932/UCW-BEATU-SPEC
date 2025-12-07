@@ -1,11 +1,14 @@
 package com.ucw.beatu.business.user.presentation.ui
 
+import android.content.Context
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EdgeEffect
 import androidx.core.os.BundleCompat
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -36,6 +39,9 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
     private var adapter: UserWorksViewerAdapter? = null
     private var noMoreVideosToast: NoMoreVideosToast? = null
     private var previousDestinationId: Int? = null
+    private var isLandscapeMode = false // 跟踪是否在横屏模式
+    private var pendingRestoreFromLandscape = false // 标记是否需要从横屏恢复播放器
+    private var fragmentLifecycleCallback: FragmentManager.FragmentLifecycleCallbacks? = null // Fragment 生命周期回调
     private val pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) {
             super.onPageSelected(position)
@@ -61,6 +67,44 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
         RouterRegistry.registerUserWorksViewerRouter(this)
         // 设置导航监听，处理从横屏返回的情况
         setupNavigationListener()
+        // ✅ 添加 Fragment 生命周期监听，在 Fragment attach 时恢复播放器
+        setupFragmentLifecycleCallback()
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // ✅ 修复：添加与 RecommendFragment 相同的 onResume 检查机制
+        // 检查屏幕方向，如果从横屏返回，标记需要恢复播放器（但不立即恢复，等待 Fragment 创建完成）
+        val configuration = resources.configuration
+        val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        Log.d(TAG, "onResume: 检查屏幕方向，isPortrait=$isPortrait, isLandscapeMode=$isLandscapeMode")
+        if (isPortrait && isLandscapeMode) {
+            Log.d(TAG, "onResume: ✅ 检测到从横屏返回，标记需要恢复播放器（等待 Fragment 创建完成）")
+            // 标记需要恢复，但不立即恢复，等待 Fragment 创建完成
+            pendingRestoreFromLandscape = true
+            isLandscapeMode = false
+        } else {
+            Log.d(TAG, "onResume: 未触发恢复，isPortrait=$isPortrait, isLandscapeMode=$isLandscapeMode")
+        }
+    }
+    
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // ✅ 修复：添加与 RecommendFragment 相同的 onConfigurationChanged 监听机制
+        // 由于 MainActivity 配置了 configChanges，屏幕旋转时会调用此方法
+        // 使用 post 延迟执行，避免阻塞主线程
+        val isLandscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val isPortrait = newConfig.orientation == Configuration.ORIENTATION_PORTRAIT
+        Log.d(TAG, "onConfigurationChanged: 屏幕方向变化，isLandscape=$isLandscape, isPortrait=$isPortrait, isLandscapeMode=$isLandscapeMode")
+        
+        if (isPortrait && isLandscapeMode) {
+            // 从横屏返回竖屏，标记需要恢复播放器（等待 Fragment 创建完成）
+            Log.d(TAG, "onConfigurationChanged: ✅ 从横屏返回竖屏，标记需要恢复播放器（等待 Fragment 创建完成）")
+            pendingRestoreFromLandscape = true
+            isLandscapeMode = false
+        } else {
+            Log.d(TAG, "onConfigurationChanged: 未触发恢复，isPortrait=$isPortrait, isLandscapeMode=$isLandscapeMode")
+        }
     }
     
     override fun onDestroyView() {
@@ -68,6 +112,11 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
         viewPager?.unregisterOnPageChangeCallback(pageChangeCallback)
         viewPager = null
         adapter = null
+        // 取消注册 Fragment 生命周期监听
+        fragmentLifecycleCallback?.let {
+            childFragmentManager.unregisterFragmentLifecycleCallbacks(it)
+            fragmentLifecycleCallback = null
+        }
         // 取消注册 Router
         RouterRegistry.registerUserWorksViewerRouter(null)
     }
@@ -114,6 +163,28 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
     override fun getCurrentVideoIndex(): Int? {
         return viewModel.uiState.value.currentIndex.takeIf { 
             viewModel.uiState.value.videoList.isNotEmpty() 
+        }
+    }
+    
+    /**
+     * 通知进入横屏模式（供 VideoItemFragment 调用，确保按钮横屏和自然横屏逻辑一致）
+     */
+    override fun notifyEnterLandscapeMode() {
+        if (!isLandscapeMode) {
+            Log.d(TAG, "notifyEnterLandscapeMode: 按钮横屏进入，设置 isLandscapeMode=true")
+            isLandscapeMode = true
+        }
+    }
+    
+    /**
+     * 通知退出横屏模式（供 VideoItemFragment 或导航监听器调用，确保按钮退出和自然横屏退出逻辑一致）
+     */
+    override fun notifyExitLandscapeMode() {
+        if (isLandscapeMode) {
+            Log.d(TAG, "notifyExitLandscapeMode: 退出横屏模式，标记需要恢复播放器（等待 Fragment 创建完成）")
+            isLandscapeMode = false
+            // 标记需要恢复，等待 Fragment 创建完成
+            pendingRestoreFromLandscape = true
         }
     }
 
@@ -200,6 +271,7 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
                             viewPager?.setCurrentItem(desiredIndex, false)
                         }
                         handlePageSelected(desiredIndex)
+                        // ✅ 注意：恢复播放器现在由 FragmentLifecycleCallbacks 处理，不再需要 postDelayed
                     }
                 }
             }
@@ -219,6 +291,13 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
                 } else {
                     router.onParentVisibilityChanged(fragment, false)
                 }
+            }
+            
+            // ✅ 修复：如果 Fragment 已可见且需要恢复播放器，立即恢复
+            if (pendingRestoreFromLandscape && currentFragment != null && currentFragment.isVisible) {
+                Log.d(TAG, "handlePageSelected: Fragment 已可见，立即恢复播放器，position=$position")
+                pendingRestoreFromLandscape = false
+                router.restorePlayerFromLandscape(currentFragment)
             }
         } else {
             Log.e("UserWorksViewerFragment", "VideoItemRouter not registered")
@@ -342,13 +421,24 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
                 com.ucw.beatu.shared.common.navigation.NavigationIds.LANDSCAPE
             )
             
-            // 当从横屏返回到用户作品观看页面时，恢复播放器
+            // ✅ 修复：当导航到横屏页面时，设置横屏模式标志
+            if (destination.id == landscapeDestinationId && previousDestinationId == userWorksViewerDestinationId) {
+                Log.d(TAG, "导航到横屏页面，设置 isLandscapeMode=true")
+                isLandscapeMode = true
+            }
+            
+            // 当从横屏返回到用户作品观看页面时，标记需要恢复播放器
             if (destination.id == userWorksViewerDestinationId && previousDestinationId == landscapeDestinationId) {
-                Log.d(TAG, "从横屏返回到用户作品观看页面，恢复播放器，previousDestinationId=$previousDestinationId")
-                // 使用延迟执行，确保 Fragment 已经恢复
-                view?.post {
-                    restorePlayerFromLandscape()
+                Log.d(TAG, "从横屏返回到用户作品观看页面，标记需要恢复播放器，previousDestinationId=$previousDestinationId, isLandscapeMode=$isLandscapeMode")
+                // ✅ 修复：确保 isLandscapeMode 为 true（应该在进入横屏时已设置，这里作为保险）
+                if (!isLandscapeMode) {
+                    Log.w(TAG, "警告：从横屏返回时 isLandscapeMode=false，可能未正确设置，强制设置为 true")
+                    isLandscapeMode = true
                 }
+                // 标记需要恢复，等待 Fragment 创建完成
+                // 注意：这里作为备用机制，主要依赖 onConfigurationChanged 和 onResume
+                pendingRestoreFromLandscape = true
+                isLandscapeMode = false
             }
             
             // 记录当前的导航目标，作为下次的前一个目标
@@ -357,11 +447,55 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
     }
     
     /**
+     * 设置 Fragment 生命周期回调，在 Fragment View 创建时恢复播放器
+     * 这是事件驱动的方案，比时间延迟更可靠
+     * 使用 onFragmentViewCreated 确保 Fragment 的 View 已创建，可以安全地操作播放器
+     */
+    private fun setupFragmentLifecycleCallback() {
+        fragmentLifecycleCallback = object : FragmentManager.FragmentLifecycleCallbacks() {
+            override fun onFragmentViewCreated(
+                fm: FragmentManager,
+                f: Fragment,
+                v: View,
+                savedInstanceState: Bundle?
+            ) {
+                super.onFragmentViewCreated(fm, f, v, savedInstanceState)
+                // 检查是否需要恢复播放器
+                if (pendingRestoreFromLandscape) {
+                    val currentPosition = viewPager?.currentItem ?: -1
+                    if (currentPosition >= 0) {
+                        val fragmentTag = "f$currentPosition"
+                        // 确保是当前页面的 Fragment
+                        if (f.tag == fragmentTag) {
+                            // 使用 Router 接口检查 Fragment 类型并恢复播放器
+                            val router = RouterRegistry.getVideoItemRouter()
+                            if (router != null) {
+                                // 使用 post 确保 Fragment 已完全初始化（包括 isVisible 状态）
+                                viewPager?.post {
+                                    if (f.isVisible && pendingRestoreFromLandscape) {
+                                        Log.d(TAG, "onFragmentViewCreated: Fragment View 已创建，恢复播放器，tag=${f.tag}, position=$currentPosition")
+                                        pendingRestoreFromLandscape = false
+                                        router.restorePlayerFromLandscape(f)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // 注册 Fragment 生命周期回调，递归监听子 Fragment
+        childFragmentManager.registerFragmentLifecycleCallbacks(fragmentLifecycleCallback!!, true)
+    }
+    
+    /**
      * 从横屏返回后恢复播放器
      * 使用与 RecommendFragment 相同的逻辑
+     * 注意：现在主要由 FragmentLifecycleCallbacks 处理，此方法作为备用
      */
     private fun restorePlayerFromLandscape() {
         val currentPosition = viewPager?.currentItem ?: -1
+        Log.d(TAG, "restorePlayerFromLandscape: 开始恢复播放器，currentPosition=$currentPosition, isLandscapeMode=$isLandscapeMode")
         if (currentPosition >= 0) {
             val currentFragmentTag = "f$currentPosition"
             val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
@@ -369,11 +503,13 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
             // 使用 Router 接口调用 VideoItemFragment 的恢复方法
             val router = RouterRegistry.getVideoItemRouter()
             if (router != null && currentFragment != null && currentFragment.isVisible) {
-                Log.d(TAG, "恢复当前可见的VideoItemFragment播放器，position=$currentPosition")
+                Log.d(TAG, "restorePlayerFromLandscape: ✅ 找到可见的VideoItemFragment，position=$currentPosition，开始恢复播放器")
                 router.restorePlayerFromLandscape(currentFragment)
             } else {
-                Log.w(TAG, "restorePlayerFromLandscape: 未找到可见的VideoItemFragment，currentPosition=$currentPosition, router=${router != null}, fragment=${currentFragment != null}, isVisible=${currentFragment?.isVisible}")
+                Log.w(TAG, "restorePlayerFromLandscape: ❌ 未找到可见的VideoItemFragment，currentPosition=$currentPosition, router=${router != null}, fragment=${currentFragment != null}, isVisible=${currentFragment?.isVisible}")
             }
+        } else {
+            Log.w(TAG, "restorePlayerFromLandscape: ❌ currentPosition 无效，currentPosition=$currentPosition")
         }
     }
 }
