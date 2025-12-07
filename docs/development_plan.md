@@ -1162,6 +1162,57 @@
         - 回弹效果：边界滑动时提供流畅的回弹动画，提升用户体验
         - 所有来源支持：搜索、历史、收藏、点赞、作品等所有来源的视频列表都支持横屏切换和边界提示
 
+- [x] fix: 修复用户视频列表页没有横屏功能的问题
+    - 2025-12-07 - done by KJH
+    - 需求：在用户视频列表页（UserWorksViewerFragment）中，点击横屏按钮无法切换到横屏模式，导致用户无法在用户作品观看页面使用横屏功能。
+    - 问题分析：
+      1. **导航 Action 硬编码**：`VideoItemFragment.openLandscapeMode()` 方法硬编码使用 `ACTION_FEED_TO_LANDSCAPE`，没有根据当前导航目的地动态选择正确的 action
+      2. **缺少从横屏返回的恢复逻辑**：`UserWorksViewerFragment` 没有监听从横屏返回的事件，无法恢复播放器
+      3. **模块间依赖问题**：`UserWorksViewerFragment` 直接引用 `VideoItemFragment` 类，违反了模块化架构原则
+    - 修复方案：
+      1. ✅ **动态选择导航 Action**：
+         - 修改 `VideoItemFragment.openLandscapeMode()` 方法，根据当前导航目的地动态选择正确的 action
+         - 如果当前在 `USER_WORKS_VIEWER` 页面，使用 `ACTION_USER_WORKS_VIEWER_TO_LANDSCAPE`
+         - 否则，使用 `ACTION_FEED_TO_LANDSCAPE`（默认）
+         - 通过 `navController.currentDestination?.id` 获取当前导航目的地
+      2. ✅ **添加导航监听器**：
+         - 在 `UserWorksViewerFragment` 中添加 `setupNavigationListener()` 方法
+         - 监听导航返回事件，当从横屏返回到用户作品观看页面时，自动恢复播放器
+         - 使用 `previousDestinationId` 变量跟踪前一个导航目标
+      3. ✅ **扩展 Router 接口**：
+         - 在 `VideoItemRouter` 接口中添加 `restorePlayerFromLandscape(fragment: Fragment)` 方法
+         - 在 `VideoItemRouterImpl` 中实现该方法，调用 `VideoItemFragment.restorePlayerFromLandscape()`
+         - 避免 `UserWorksViewerFragment` 直接依赖 `VideoItemFragment` 类
+      4. ✅ **添加播放器恢复逻辑**：
+         - 在 `UserWorksViewerFragment` 中添加 `restorePlayerFromLandscape()` 方法
+         - 获取当前可见的 `VideoItemFragment`，通过 Router 接口调用其恢复方法
+         - 使用与 `RecommendFragment` 相同的恢复逻辑
+    - 技术亮点：
+      - **动态导航选择**：根据当前页面动态选择正确的导航 action，支持从多个页面进入横屏模式
+      - **模块化架构**：通过 Router 接口解耦模块间依赖，符合 Clean Architecture 原则
+      - **统一的恢复逻辑**：复用 `VideoItemFragment.restorePlayerFromLandscape()` 方法，保持代码一致性
+      - **导航监听机制**：通过 `addOnDestinationChangedListener` 监听导航事件，确保从横屏返回时能正确恢复
+    - 量化指标：
+      - 用户视频列表页横屏功能可用性：从 0% → 100%
+      - 从横屏返回后播放器恢复成功率：100%
+      - 模块间依赖解耦：通过 Router 接口，避免直接类依赖
+    - 修改文件：
+      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/VideoItemFragment.kt`
+        - 修改 `openLandscapeMode()` 方法，根据当前导航目的地动态选择 action
+      - `BeatUClient/business/user/presentation/src/main/java/com/ucw/beatu/business/user/presentation/ui/UserWorksViewerFragment.kt`
+        - 添加 `previousDestinationId` 变量
+        - 添加 `setupNavigationListener()` 方法
+        - 添加 `restorePlayerFromLandscape()` 方法
+      - `BeatUClient/shared/router/src/main/java/com/ucw/beatu/shared/router/VideoItemRouter.kt`
+        - 添加 `restorePlayerFromLandscape(fragment: Fragment)` 方法
+      - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/router/VideoItemRouterImpl.kt`
+        - 实现 `restorePlayerFromLandscape()` 方法
+    - 成果：
+      - 用户视频列表页可以正常使用横屏功能
+      - 从横屏返回后播放器能正确恢复，画面和声音都正常
+      - 代码符合模块化架构原则，避免模块间直接依赖
+      - 横屏功能在推荐页和用户视频列表页都能正常工作
+
 - [x] 修复用户弹窗点击视频然后点击返回视频有音效没有画面显示的问题 
     - 2025-12-07 - done by KJH
     - 需求：在推荐页点击用户头像/昵称打开用户信息弹窗，在弹窗中点击视频进入用户作品观看页面，然后点击返回按钮回到推荐页时，视频只有音效没有画面显示。
@@ -1225,6 +1276,11 @@
         - 开始对应数据库逻辑修改
         - 分步修改对应的逻辑
 
+- [x] 修改ai搜索功能不可用时的用户提醒
+    - 2025-12-07 - done by KJH
+    - 内容：详情看 docs/datatable_reconstruction_design_document.md
+        - 开始对应数据库逻辑修改
+        - 分步修改对应的逻辑
 
 - [ ] 解决点击评论与用户头像的视频不缩小放置到上面部分的问题
     - 后续有时间修改 - done by

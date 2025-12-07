@@ -84,7 +84,7 @@ class LandscapeFragment : Fragment(R.layout.fragment_landscape) {
             // 没有视频列表时，处理外部视频参数并加载所有横屏视频
             Log.d(TAG, "LandscapeFragment: No fixed video list, loading all landscape videos")
             handleExternalVideoArgs()
-            viewModel.loadVideoList()
+        viewModel.loadVideoList()
         }
     }
 

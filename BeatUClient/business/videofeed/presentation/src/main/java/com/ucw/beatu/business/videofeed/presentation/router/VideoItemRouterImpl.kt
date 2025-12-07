@@ -25,5 +25,11 @@ class VideoItemRouterImpl : VideoItemRouter {
             fragment.onParentVisibilityChanged(isVisible)
         }
     }
+    
+    override fun restorePlayerFromLandscape(fragment: Fragment) {
+        if (fragment is VideoItemFragment) {
+            fragment.restorePlayerFromLandscape()
+        }
+    }
 }
 

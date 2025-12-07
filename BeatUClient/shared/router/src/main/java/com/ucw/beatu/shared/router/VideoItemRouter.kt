@@ -29,5 +29,11 @@ interface VideoItemRouter {
      * @param isVisible 是否可见
      */
     fun onParentVisibilityChanged(fragment: Fragment, isVisible: Boolean)
+    
+    /**
+     * 从横屏返回后恢复播放器
+     * @param fragment Fragment 实例
+     */
+    fun restorePlayerFromLandscape(fragment: Fragment)
 }
 

@@ -635,10 +635,22 @@ class VideoItemFragment : BaseFeedItemFragment() {
             PlayerView.switchTargetView(player, playerView, null)
         }
 
-        // 优化：预先获取资源ID，避免在导航时查找
-        val actionId = NavigationHelper.getResourceId(requireContext(), NavigationIds.ACTION_FEED_TO_LANDSCAPE)
+        // ✅ 修复：根据当前导航目的地动态选择正确的 action
+        val context = requireContext()
+        val currentDestId = navController.currentDestination?.id
+        val userWorksViewerDestId = NavigationHelper.getResourceId(context, NavigationIds.USER_WORKS_VIEWER)
+        
+        // 根据当前所在的 destination 选择正确的 action
+        val actionId = if (currentDestId == userWorksViewerDestId) {
+            // 从用户作品观看页面导航到横屏
+            NavigationHelper.getResourceId(context, NavigationIds.ACTION_USER_WORKS_VIEWER_TO_LANDSCAPE)
+        } else {
+            // 从Feed页面导航到横屏（默认）
+            NavigationHelper.getResourceId(context, NavigationIds.ACTION_FEED_TO_LANDSCAPE)
+        }
+        
         if (actionId == 0) {
-            Log.e(TAG, "Navigation action not found: ${NavigationIds.ACTION_FEED_TO_LANDSCAPE}")
+            Log.e(TAG, "Navigation action not found: currentDestId=$currentDestId, userWorksViewerDestId=$userWorksViewerDestId")
             return
         }
 

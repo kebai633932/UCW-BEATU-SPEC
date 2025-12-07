@@ -35,6 +35,7 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
     private var viewPager: ViewPager2? = null
     private var adapter: UserWorksViewerAdapter? = null
     private var noMoreVideosToast: NoMoreVideosToast? = null
+    private var previousDestinationId: Int? = null
     private val pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) {
             super.onPageSelected(position)
@@ -58,6 +59,8 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
         collectUiState()
         // 注册 Router，供子 Fragment 使用
         RouterRegistry.registerUserWorksViewerRouter(this)
+        // 设置导航监听，处理从横屏返回的情况
+        setupNavigationListener()
     }
     
     override fun onDestroyView() {
@@ -318,6 +321,60 @@ class UserWorksViewerFragment : Fragment(R.layout.fragment_user_works_viewer), U
     fun showNoMoreVideosToast() {
         Log.d(TAG, "showNoMoreVideosToast called, toast=${noMoreVideosToast != null}")
         noMoreVideosToast?.show()
+    }
+    
+    /**
+     * 设置导航监听，处理从横屏返回的情况
+     */
+    private fun setupNavigationListener() {
+        val navController = findNavController()
+        
+        // 初始化 previousDestinationId 为当前的目标
+        previousDestinationId = navController.currentDestination?.id
+        
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            val userWorksViewerDestinationId = com.ucw.beatu.shared.common.navigation.NavigationHelper.getResourceId(
+                requireContext(),
+                com.ucw.beatu.shared.common.navigation.NavigationIds.USER_WORKS_VIEWER
+            )
+            val landscapeDestinationId = com.ucw.beatu.shared.common.navigation.NavigationHelper.getResourceId(
+                requireContext(),
+                com.ucw.beatu.shared.common.navigation.NavigationIds.LANDSCAPE
+            )
+            
+            // 当从横屏返回到用户作品观看页面时，恢复播放器
+            if (destination.id == userWorksViewerDestinationId && previousDestinationId == landscapeDestinationId) {
+                Log.d(TAG, "从横屏返回到用户作品观看页面，恢复播放器，previousDestinationId=$previousDestinationId")
+                // 使用延迟执行，确保 Fragment 已经恢复
+                view?.post {
+                    restorePlayerFromLandscape()
+                }
+            }
+            
+            // 记录当前的导航目标，作为下次的前一个目标
+            previousDestinationId = destination.id
+        }
+    }
+    
+    /**
+     * 从横屏返回后恢复播放器
+     * 使用与 RecommendFragment 相同的逻辑
+     */
+    private fun restorePlayerFromLandscape() {
+        val currentPosition = viewPager?.currentItem ?: -1
+        if (currentPosition >= 0) {
+            val currentFragmentTag = "f$currentPosition"
+            val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
+            
+            // 使用 Router 接口调用 VideoItemFragment 的恢复方法
+            val router = RouterRegistry.getVideoItemRouter()
+            if (router != null && currentFragment != null && currentFragment.isVisible) {
+                Log.d(TAG, "恢复当前可见的VideoItemFragment播放器，position=$currentPosition")
+                router.restorePlayerFromLandscape(currentFragment)
+            } else {
+                Log.w(TAG, "restorePlayerFromLandscape: 未找到可见的VideoItemFragment，currentPosition=$currentPosition, router=${router != null}, fragment=${currentFragment != null}, isVisible=${currentFragment?.isVisible}")
+            }
+        }
     }
 }
 
