@@ -210,8 +210,12 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 // 视频内容：显示播放器，隐藏图文容器
                 playerView?.visibility = View.VISIBLE
                 imagePager?.visibility = View.GONE
-                // 所有视频内容都显示横屏按钮
-                fullScreenButton?.visibility = View.VISIBLE
+                // 只有 LANDSCAPE 视频才显示横屏按钮
+                fullScreenButton?.visibility = if (item.orientation == VideoOrientation.LANDSCAPE) {
+                    View.VISIBLE
+                } else {
+                    View.GONE
+                }
             }
         }
         
@@ -624,7 +628,13 @@ class VideoItemFragment : BaseFeedItemFragment() {
             return
         }
 
-        // 执行横屏切换（所有视频内容都支持横屏）
+        // 检查视频 orientation，只有 LANDSCAPE 视频才支持横屏
+        if (item.orientation != VideoOrientation.LANDSCAPE) {
+            Log.d(TAG, "handleFullScreenButtonClick: 当前视频不是 LANDSCAPE，不支持横屏")
+            return
+        }
+
+        // 执行横屏切换（只有 LANDSCAPE 视频支持横屏）
         openLandscapeMode()
     }
 

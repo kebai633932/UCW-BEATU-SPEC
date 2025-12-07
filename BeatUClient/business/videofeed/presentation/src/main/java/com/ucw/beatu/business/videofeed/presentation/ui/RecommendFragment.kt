@@ -719,6 +719,7 @@ class RecommendFragment : Fragment() {
     
     /**
      * 检查屏幕方向并切换到landscape模式
+     * 只有当前视频的 orientation 为 LANDSCAPE 时才自动切换
      */
     private fun checkOrientationAndSwitch() {
         if (!isAdded || isLandscapeMode) return
@@ -732,11 +733,18 @@ class RecommendFragment : Fragment() {
         
         val currentPosition = viewPager?.currentItem ?: -1
         if (currentPosition >= 0) {
-            val currentFragmentTag = "f$currentPosition"
+            // 检查当前视频的 orientation，只有 LANDSCAPE 视频才自动切换
+            val currentVideo = adapter?.getVideoAt(currentPosition)
+            if (currentVideo?.orientation != com.ucw.beatu.shared.common.model.VideoOrientation.LANDSCAPE) {
+                Log.d(TAG, "检测到横屏，但当前视频不是 LANDSCAPE，不自动切换")
+                return
+            }
+            
+            val currentFragmentTag = "f${adapter?.getItemId(currentPosition)}"
             val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
             
             if (currentFragment is VideoItemFragment) {
-                Log.d(TAG, "检测到横屏，自动切换到landscape模式")
+                Log.d(TAG, "检测到横屏，当前视频为 LANDSCAPE，自动切换到landscape模式")
                 isLandscapeMode = true
                 // 使用post延迟执行，避免阻塞主线程
                 view?.post {

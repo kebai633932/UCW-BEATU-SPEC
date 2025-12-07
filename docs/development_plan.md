@@ -801,12 +801,40 @@
     - 下拉刷新阈值：100dp（约 300px）
     - 刷新获取视频数量：5-10 条（随机）
     - 刷新完成到播放首条视频延迟：< 200ms
-  - 修改文件：
+    - 修改文件：
     - `BeatUClient/app/src/main/java/com/ucw/beatu/MainActivity.kt`
     - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/FeedFragment.kt`
     - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/RecommendFragment.kt`
     - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/viewmodel/RecommendViewModel.kt`
     - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/adapter/VideoFeedAdapter.kt`
+
+- [x] 全屏按钮显示与自动旋转优化（仅 LANDSCAPE 视频支持）
+  - 2025-12-07 - done by ZX
+  - 需求：只有 `orientation=LANDSCAPE` 的视频才显示全屏（横屏）播放按钮，并且当手机反转时，只有 LANDSCAPE 视频才会自动旋转为横屏。
+  - 内容：
+    1. ✅ **全屏按钮显示逻辑优化**：
+       - 在 `VideoItemFragment` 中修改全屏按钮的显示逻辑
+       - 只有 `item.orientation == VideoOrientation.LANDSCAPE` 的视频才显示全屏按钮
+       - PORTRAIT 视频不显示全屏按钮
+    2. ✅ **自动旋转逻辑优化**：
+       - 在 `RecommendFragment.checkOrientationAndSwitch()` 中添加 orientation 检查
+       - 只有当前视频的 `orientation == VideoOrientation.LANDSCAPE` 时，手机反转才会自动切换到横屏模式
+       - PORTRAIT 视频不会自动旋转
+    3. ✅ **全屏按钮点击保护**：
+       - 在 `VideoItemFragment.handleFullScreenButtonClick()` 中添加 orientation 检查
+       - 确保只有 LANDSCAPE 视频才能进入横屏，即使按钮显示也进行二次验证
+  - 技术亮点：
+    - **条件显示**：根据视频的 orientation 属性动态控制全屏按钮的显示
+    - **智能旋转**：只有适合横屏播放的视频才会响应手机旋转事件
+    - **双重保护**：UI 显示和点击逻辑都进行 orientation 检查，确保逻辑一致性
+  - 量化指标：
+    - PORTRAIT 视频全屏按钮显示率：0%（不显示）
+    - LANDSCAPE 视频全屏按钮显示率：100%（显示）
+    - PORTRAIT 视频自动旋转率：0%（不自动旋转）
+    - LANDSCAPE 视频自动旋转率：100%（自动旋转）
+  - 修改文件：
+    - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/VideoItemFragment.kt`
+    - `BeatUClient/business/videofeed/presentation/src/main/java/com/ucw/beatu/business/videofeed/presentation/ui/RecommendFragment.kt`
 
 
 - [x] 修复加载的视频没有封面的问题
