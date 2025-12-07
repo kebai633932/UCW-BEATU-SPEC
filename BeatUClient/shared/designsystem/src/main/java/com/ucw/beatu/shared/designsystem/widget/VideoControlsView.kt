@@ -52,6 +52,7 @@ class VideoControlsView @JvmOverloads constructor(
         fun onFavoriteClicked()
         fun onCommentClicked()
         fun onShareClicked()
+        fun onLandscapeClicked() {}
         fun onSeekRequested(positionMs: Long) {}
     }
 
@@ -106,6 +107,7 @@ class VideoControlsView @JvmOverloads constructor(
         favoriteIcon.setOnClickListener { listener?.onFavoriteClicked() }
         findViewById<View>(R.id.iv_comment).setOnClickListener { listener?.onCommentClicked() }
         findViewById<View>(R.id.iv_share).setOnClickListener { listener?.onShareClicked() }
+        findViewById<View>(R.id.iv_fullscreen).setOnClickListener { listener?.onLandscapeClicked() }
 
         // 普通 SeekBar 拖动（进度条已经可见的情况，例如暂停时）
         progressBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {

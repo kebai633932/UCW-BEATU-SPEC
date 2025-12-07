@@ -124,10 +124,8 @@ class RecommendFragment : Fragment() {
         val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
         if (isPortrait && isLandscapeMode) {
             Log.d(TAG, "onResume: 检测到从横屏返回，恢复播放器")
-            isLandscapeMode = false
-            view?.post {
-                restorePlayerFromLandscape()
-            }
+            // 使用统一的退出横屏逻辑
+            notifyExitLandscapeMode()
         }
     }
     
@@ -387,11 +385,8 @@ class RecommendFragment : Fragment() {
         if (isPortrait && isLandscapeMode) {
             // 从横屏返回竖屏，恢复播放器
             Log.d(TAG, "从横屏返回竖屏，恢复播放器")
-            isLandscapeMode = false
-            // 延迟一下，确保View已经布局完成
-            view?.post {
-                restorePlayerFromLandscape()
-            }
+            // 使用统一的退出横屏逻辑
+            notifyExitLandscapeMode()
         }
     }
     
@@ -404,10 +399,37 @@ class RecommendFragment : Fragment() {
             val currentFragmentTag = "f$currentPosition"
             val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
             
-            if (currentFragment is VideoItemFragment) {
-                Log.d(TAG, "恢复当前可见的VideoItemFragment播放器")
+            // 确保获取的是真正可见的Fragment
+            if (currentFragment is VideoItemFragment && currentFragment.isVisible) {
+                Log.d(TAG, "恢复当前可见的VideoItemFragment播放器，position=$currentPosition")
                 // 获取当前可见的playerview，将播放器绑定到view然后播放
                 currentFragment.restorePlayerFromLandscape()
+            } else {
+                Log.w(TAG, "restorePlayerFromLandscape: 未找到可见的VideoItemFragment，currentPosition=$currentPosition, fragment=$currentFragment, isVisible=${currentFragment?.isVisible}")
+            }
+        }
+    }
+    
+    /**
+     * 通知进入横屏模式（供 VideoItemFragment 调用，确保按钮横屏和自然横屏逻辑一致）
+     */
+    fun notifyEnterLandscapeMode() {
+        if (!isLandscapeMode) {
+            Log.d(TAG, "notifyEnterLandscapeMode: 按钮横屏进入，设置 isLandscapeMode=true")
+            isLandscapeMode = true
+        }
+    }
+    
+    /**
+     * 通知退出横屏模式（供 VideoItemFragment 或导航监听器调用，确保按钮退出和自然横屏退出逻辑一致）
+     */
+    fun notifyExitLandscapeMode() {
+        if (isLandscapeMode) {
+            Log.d(TAG, "notifyExitLandscapeMode: 退出横屏模式，设置 isLandscapeMode=false")
+            isLandscapeMode = false
+            // 统一通过 restorePlayerFromLandscape 恢复播放器
+            view?.post {
+                restorePlayerFromLandscape()
             }
         }
     }
@@ -424,10 +446,8 @@ class RecommendFragment : Fragment() {
             )
             if (destination.id == feedDestinationId && isLandscapeMode) {
                 Log.d(TAG, "从landscape返回到feed，恢复播放器")
-                isLandscapeMode = false
-                view?.post {
-                    restorePlayerFromLandscape()
-                }
+                // 使用统一的退出横屏逻辑
+                notifyExitLandscapeMode()
             }
         }
     }

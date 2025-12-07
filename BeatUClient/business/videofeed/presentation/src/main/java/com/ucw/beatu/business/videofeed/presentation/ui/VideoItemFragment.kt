@@ -1,5 +1,4 @@
 package com.ucw.beatu.business.videofeed.presentation.ui
-
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Bundle
@@ -65,7 +64,6 @@ class VideoItemFragment : BaseFeedItemFragment() {
     private var navigatingToLandscape = false
     private var hasPreparedPlayer = false
     private var imageAutoScrollJob: Job? = null
-    private var lastFullScreenClickTime = 0L
     private var isRestoringFromLandscape = false
 
     // 用户信息展示相关
@@ -102,9 +100,6 @@ class VideoItemFragment : BaseFeedItemFragment() {
          controlsView = view.findViewById(R.id.video_controls)
          // 注意：标题/频道名称等现在定义在 shared:designsystem 的 VideoControlsView 布局中
          val sharedControlsRoot = controlsView
-        val fullScreenButton = sharedControlsRoot?.findViewById<View>(
-            com.ucw.beatu.shared.designsystem.R.id.iv_fullscreen
-        )
 
         videoItem?.let { item ->
             // 通过 VideoControlsView 内部的 TextView 展示标题与频道名称
@@ -174,20 +169,11 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 playerView?.visibility = View.GONE
                 imagePager?.visibility = View.VISIBLE
                 setupImagePager(item.imageUrls)
-                // 图文内容不显示横屏按钮
-                fullScreenButton?.visibility = View.GONE
             } else {
                 // 视频内容：显示播放器，隐藏图文容器
                 playerView?.visibility = View.VISIBLE
                 imagePager?.visibility = View.GONE
-                // 所有视频内容都显示横屏按钮
-                fullScreenButton?.visibility = View.VISIBLE
             }
-        }
-        
-        // 设置横屏按钮点击监听（所有视频内容都支持横屏）
-        fullScreenButton?.setOnClickListener {
-            handleFullScreenButtonClick()
         }
 
         observeViewModel()
@@ -276,6 +262,10 @@ class VideoItemFragment : BaseFeedItemFragment() {
                     }
                 }
                 dialog.show(parentFragmentManager, "video_share_options")
+            }
+
+            override fun onLandscapeClicked() {
+                openLandscapeMode()
             }
 
             override fun onSeekRequested(positionMs: Long) {
@@ -515,7 +505,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
         // 确保 PlayerView 已经准备好，然后再绑定播放器
         // 从横屏返回竖屏时，需要等待 View 布局完成
         pv.post {
-            if (isAdded && pv != null) {
+            if (isAdded) {
                 // 确保 PlayerView 的 player 为 null，避免绑定冲突
                 if (pv.player != null && pv.player !== viewModel.mediaPlayer()) {
                     Log.d(TAG, "reattachPlayer: 清理 PlayerView 上之前的播放器")
@@ -527,44 +517,9 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 hasPreparedPlayer = true
                 Log.d(TAG, "reattachPlayer: hasPreparedPlayer=$hasPreparedPlayer, playerView.player=${pv.player}")
             } else {
-                Log.w(TAG, "reattachPlayer: Fragment not added or PlayerView is null after post")
+                Log.w(TAG, "reattachPlayer: Fragment not added after post")
             }
         }
-    }
-
-    /**
-     * 处理横屏按钮点击事件
-     * 添加防抖处理和状态检查
-     */
-    private fun handleFullScreenButtonClick() {
-        // 防抖处理：500ms内只响应一次点击
-        val currentTime = System.currentTimeMillis()
-        if (currentTime - lastFullScreenClickTime < 500) {
-            Log.d(TAG, "handleFullScreenButtonClick: 点击过快，忽略")
-            return
-        }
-        lastFullScreenClickTime = currentTime
-
-        // 检查是否正在导航中
-        if (navigatingToLandscape) {
-            Log.d(TAG, "handleFullScreenButtonClick: 正在导航中，忽略")
-            return
-        }
-
-        // 检查视频项是否有效
-        val item = videoItem ?: run {
-            Log.e(TAG, "handleFullScreenButtonClick: videoItem is null")
-            return
-        }
-
-        // 检查是否为图文内容
-        if (item.type == FeedContentType.IMAGE_POST) {
-            Log.d(TAG, "handleFullScreenButtonClick: 图文内容不支持横屏")
-            return
-        }
-
-        // 执行横屏切换（所有视频内容都支持横屏）
-        openLandscapeMode()
     }
 
     fun openLandscapeMode() {
@@ -577,49 +532,21 @@ class VideoItemFragment : BaseFeedItemFragment() {
             Log.e(TAG, "openLandscapeMode: videoItem null")
             return
         }
-
+        
+        // ✅ 对齐逻辑：通知父 Fragment（RecommendFragment）进入横屏模式，确保按钮横屏和自然横屏逻辑一致
+        (parentFragment as? RecommendFragment)?.notifyEnterLandscapeMode()
+        
         // 优化：先保存会话和切换播放器（这些操作很快）
         viewModel.persistPlaybackSession()
         viewModel.mediaPlayer()?.let { player ->
             PlayerView.switchTargetView(player, playerView, null)
         }
 
-        // 根据当前导航目的地选择正确的action
-        val currentDestId = navController.currentDestination?.id
-        val userWorksViewerDestId = NavigationHelper.getResourceId(requireContext(), NavigationIds.USER_WORKS_VIEWER)
-
-        val actionId = if (currentDestId == userWorksViewerDestId) {
-            // 从用户作品观看页面导航到横屏
-            NavigationHelper.getResourceId(requireContext(), NavigationIds.ACTION_USER_WORKS_VIEWER_TO_LANDSCAPE)
-        } else {
-            // 从Feed页面导航到横屏（默认）
-            // 优化：预先获取资源ID，避免在导航时查找
-            NavigationHelper.getResourceId(requireContext(), NavigationIds.ACTION_FEED_TO_LANDSCAPE)
-        }
-
+        // 优化：预先获取资源ID，避免在导航时查找
+        val actionId = NavigationHelper.getResourceId(requireContext(), NavigationIds.ACTION_FEED_TO_LANDSCAPE)
         if (actionId == 0) {
-            Log.e(TAG, "Navigation action not found: currentDestId=$currentDestId, userWorksViewerDestId=$userWorksViewerDestId")
+            Log.e(TAG, "Navigation action not found: ${NavigationIds.ACTION_FEED_TO_LANDSCAPE}")
             return
-        }
-
-        // 如果从用户作品观看页面导航（包括搜索、历史、收藏、点赞等），获取视频列表并传递
-        val videoList = if (currentDestId == userWorksViewerDestId) {
-            val router = RouterRegistry.getUserWorksViewerRouter()
-            val list = router?.getCurrentVideoList()
-            Log.d(TAG, "openLandscapeMode: from userWorksViewer, videoListSize=${list?.size ?: 0}")
-            list
-        } else {
-            Log.d(TAG, "openLandscapeMode: from feed or other page, no video list restriction")
-            null
-        }
-
-        val currentIndex = if (currentDestId == userWorksViewerDestId) {
-            val router = RouterRegistry.getUserWorksViewerRouter()
-            val index = router?.getCurrentVideoIndex() ?: 0
-            Log.d(TAG, "openLandscapeMode: from userWorksViewer, currentIndex=$index")
-            index
-        } else {
-            0
         }
 
         // 优化：预先构建参数
@@ -632,26 +559,22 @@ class VideoItemFragment : BaseFeedItemFragment() {
             LandscapeLaunchContract.EXTRA_VIDEO_COMMENT to item.commentCount,
             LandscapeLaunchContract.EXTRA_VIDEO_FAVORITE to item.favoriteCount,
             LandscapeLaunchContract.EXTRA_VIDEO_SHARE to item.shareCount
-        ).apply {
-            // 如果有视频列表，传递视频列表和当前索引
-            if (videoList != null) {
-                putParcelableArrayList(LandscapeLaunchContract.EXTRA_VIDEO_LIST, ArrayList(videoList))
-                putInt(LandscapeLaunchContract.EXTRA_CURRENT_INDEX, currentIndex)
-            }
-        }
+        )
 
         navigatingToLandscape = true
-
+        
         // 优化：使用post延迟导航，让播放器切换先完成，减少卡顿
         view?.post {
             runCatching { navController.navigate(actionId, args) }
                 .onFailure {
                     navigatingToLandscape = false
+                    // ✅ 对齐逻辑：如果导航失败，需要通知父 Fragment 退出横屏模式
+                    (parentFragment as? RecommendFragment)?.notifyExitLandscapeMode()
                     Log.e(TAG, "Failed to navigate to landscape fragment", it)
                 }
         }
     }
-
+    
     /**
      * 从横屏返回后恢复播放器
      * 由于是popBackStack，生命周期函数不会触发，需要手动调用此方法
@@ -661,38 +584,42 @@ class VideoItemFragment : BaseFeedItemFragment() {
             Log.w(TAG, "restorePlayerFromLandscape: Fragment not ready, skip")
             return
         }
-
+        
         val item = videoItem ?: return
         if (item.type == FeedContentType.IMAGE_POST) {
             // 图文内容不支持横竖屏切换
             Log.d(TAG, "restorePlayerFromLandscape: skip for image post ${item.id}")
             return
         }
-
+        
         val pv = playerView ?: run {
             Log.w(TAG, "restorePlayerFromLandscape: playerView is null, skip")
             return
         }
-
+        
         Log.d(TAG, "restorePlayerFromLandscape: 恢复播放器，videoId=${item.id}")
-
+        
         // 设置标志，防止 onStart 重复处理
         isRestoringFromLandscape = true
 
+        // 先设置currentVideoId，确保onHostResume能正确获取会话信息
+        // 注意：必须先调用playVideo设置currentVideoId，否则onHostResume会返回
+        viewModel.playVideo(item.id, item.videoUrl)
+
         // 优化：使用post延迟执行，确保View已经布局完成，减少卡顿
         pv.post {
-            if (!isAdded || pv == null) {
-                Log.w(TAG, "restorePlayerFromLandscape: Fragment not added or PlayerView is null after post")
+            if (!isAdded) {
+                Log.w(TAG, "restorePlayerFromLandscape: Fragment not added after post")
                 isRestoringFromLandscape = false
                 return@post
             }
-
+            
             // 使用onHostResume方法，它会检查是否有播放会话并恢复
             // onHostResume会从PlaybackSessionStore中获取会话信息，并绑定播放器到view
             viewModel.onHostResume(pv)
             hasPreparedPlayer = true
             Log.d(TAG, "restorePlayerFromLandscape: 播放器已恢复，playerView.player=${pv.player}")
-
+            
             // 优化：延迟恢复播放，让UI先渲染完成
             pv.postDelayed({
                 if (isAdded && isViewVisibleOnScreen()) {
@@ -700,7 +627,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
                 }
                 // 恢复完成后，重置标志
                 isRestoringFromLandscape = false
-            }, 100) // 延迟100ms，让UI先渲染，并确保播放器完全恢复
+            }, 50) // 延迟50ms，让UI先渲染
         }
     }
 
@@ -919,7 +846,7 @@ class VideoItemFragment : BaseFeedItemFragment() {
             val router = RouterRegistry.getUserWorksViewerRouter()
             val currentUserId = router?.getCurrentUserId()
 
-            if (currentUserId == userId && router != null) {
+            if (router != null && currentUserId == userId) {
                 // 同一个用户，通过 Router 切换到对应的视频
                 Log.d(TAG, "Already in user works viewer for user $userId, switching to video at index $initialIndex")
                 val success = router.switchToVideo(initialIndex)
