@@ -34,6 +34,43 @@ import kotlin.math.abs
  */
 @AndroidEntryPoint
 class RecommendFragment : Fragment() {
+    
+    /**
+     * 禁止ViewPager2滑动
+     */
+    fun disableViewPagerScrolling() {
+        isSpeedAdjusting = true
+        viewPager?.isUserInputEnabled = false
+        // 同时禁用内部的 RecyclerView 的嵌套滚动，防止触摸事件被拦截
+        viewPager?.getChildAt(0)?.let { recyclerView ->
+            (recyclerView as? RecyclerView)?.apply {
+                isNestedScrollingEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER // 禁用过度滚动效果
+                // 请求父视图不要拦截触摸事件
+                parent?.requestDisallowInterceptTouchEvent(true)
+                Log.d(TAG, "disableViewPagerScrolling: 禁用 RecyclerView 嵌套滚动")
+            }
+        }
+        Log.d(TAG, "disableViewPagerScrolling: 禁用 ViewPager2 用户输入，倍速调节模式")
+    }
+    
+    /**
+     * 恢复ViewPager2滑动
+     */
+    fun enableViewPagerScrolling() {
+        isSpeedAdjusting = false
+        viewPager?.isUserInputEnabled = true
+        // 恢复内部的 RecyclerView 的嵌套滚动
+        viewPager?.getChildAt(0)?.let { recyclerView ->
+            (recyclerView as? RecyclerView)?.apply {
+                isNestedScrollingEnabled = true
+                overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS // 恢复过度滚动效果
+                parent?.requestDisallowInterceptTouchEvent(false)
+                Log.d(TAG, "enableViewPagerScrolling: 恢复 RecyclerView 嵌套滚动")
+            }
+        }
+        Log.d(TAG, "enableViewPagerScrolling: 恢复 ViewPager2 用户输入，退出倍速调节模式")
+    }
 
     companion object {
         private const val TAG = "RecommendFragment"
@@ -47,6 +84,7 @@ class RecommendFragment : Fragment() {
     private var viewPager: ViewPager2? = null
     private var adapter: VideoFeedAdapter? = null
     private var isRefreshing = false
+    private var isSpeedAdjusting = false // 是否正在倍速调节
     private var pendingRestoreIndex: Int? = null
     private var pendingResumeRequest = false
 
@@ -201,6 +239,11 @@ class RecommendFragment : Fragment() {
         recyclerView: RecyclerView,
         event: MotionEvent
     ): Boolean {
+        // 如果正在倍速调节，不拦截触摸事件，让 VideoItemFragment 处理
+        if (isSpeedAdjusting) {
+            return false
+        }
+        
         // 只在第一个视频时处理下拉刷新
         if (viewPager.currentItem != 0) {
             resetPullToRefreshState()
@@ -210,8 +253,8 @@ class RecommendFragment : Fragment() {
         // 检查 RecyclerView 是否在顶部（不能向上滚动）
         val canScrollUp = recyclerView.canScrollVertically(-1)
 
-        when (event.action) {
-            MotionEvent.ACTION_DOWN -> {
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
                 // 手势开始：记录起始位置
                 if (!canScrollUp && pullToRefreshState == PullToRefreshState.IDLE) {
                     pullStartY = event.y
@@ -221,7 +264,7 @@ class RecommendFragment : Fragment() {
                 }
             }
 
-            MotionEvent.ACTION_MOVE -> {
+                MotionEvent.ACTION_MOVE -> {
                 if (pullToRefreshState == PullToRefreshState.PULLING) {
                     pullCurrentY = event.y
                     val deltaY = pullCurrentY - pullStartY // 向下滑动，deltaY 为正
@@ -439,12 +482,12 @@ class RecommendFragment : Fragment() {
                                 }
                             }
 
-                            // ✅ 修复：先处理状态恢复，再处理刷新
-                            pendingRestoreIndex?.let { target ->
-                                val safeIndex = target.coerceIn(0, state.videoList.lastIndex)
-                                viewPager?.post { viewPager?.setCurrentItem(safeIndex, false) }
-                                pendingRestoreIndex = null
-                            }
+                        // ✅ 修复：先处理状态恢复，再处理刷新
+                        pendingRestoreIndex?.let { target ->
+                            val safeIndex = target.coerceIn(0, state.videoList.lastIndex)
+                            viewPager?.post { viewPager?.setCurrentItem(safeIndex, false) }
+                            pendingRestoreIndex = null
+                        }
                         }
 
                         // 首次加载完成时，手动触发当前页的播放/轮播（包括图文）
@@ -507,7 +550,7 @@ class RecommendFragment : Fragment() {
                 if (!handled) {
                     false
                 } else {
-                    handled
+                handled
                 }
             }
         }
@@ -797,12 +840,12 @@ class RecommendFragment : Fragment() {
         // ✅ 修复严重问题1：使用 getItemId 获取正确的 tag，支持无限循环模式
         val itemId = adapter?.getItemId(currentPosition) ?: currentPosition.toLong()
         val currentFragmentTag = "f$itemId"
-        val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
-        
+            val currentFragment = childFragmentManager.findFragmentByTag(currentFragmentTag)
+            
         // ✅ 修复严重问题4：检查 Fragment 是否准备好（view 已创建且已 attach）
         if (currentFragment is VideoItemFragment && isFragmentReady(currentFragment)) {
             Log.d(TAG, "restorePlayerSafely: 恢复播放器，position=$currentPosition, tag=$currentFragmentTag, videoId=${sourceVideoId ?: "unknown"}, retry=$currentRetry")
-            currentFragment.restorePlayerFromLandscape()
+                currentFragment.restorePlayerFromLandscape()
         } else {
             // ✅ 修复严重问题4：Fragment 还未准备好，延迟重试
             if (currentRetry < maxRetries) {
@@ -855,7 +898,7 @@ class RecommendFragment : Fragment() {
                 scrollToVideoById(sourceVideoId)
             }
             restorePlayerSafely(sourceVideoId)
-        }, 200) // ✅ 修复方案2：延迟恢复，确保 ViewPager2 已更新
+        }, 300) // ✅ 修复方案2：延迟恢复，确保 ViewPager2 已更新
     }
     
     /**

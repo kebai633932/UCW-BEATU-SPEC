@@ -32,6 +32,10 @@ android {
     kotlinOptions {
         jvmTarget = "11"
     }
+    kapt {
+        // 避免 Hilt 处理阶段因跨模块符号暂不可见而生成 NonExistentClass 占位
+        correctErrorTypes = true
+    }
     buildFeatures {
         viewBinding = true
     }
@@ -40,6 +44,10 @@ android {
 dependencies {
     // Business Domain
     implementation(project(":business:videofeed:domain"))
+    
+    // User domain and data (for getting user data in VideoItemFragment)
+    implementation(project(":business:user:domain"))
+    implementation(project(":business:user:data"))  // 需要依赖 data 模块以获取 UserRepository 的 Hilt 绑定
     
     // Settings domain (for reading playback settings)
     implementation(project(":business:settings:domain"))

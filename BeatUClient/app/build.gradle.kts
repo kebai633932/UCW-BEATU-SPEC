@@ -53,6 +53,7 @@ dependencies {
     // Business modules - Presentation layers
     implementation(project(":business:videofeed:presentation"))
     implementation(project(":business:videofeed:data"))
+    implementation(project(":business:videofeed:domain"))  // ✅ 需要访问 Comment 类型
     implementation(project(":business:user:presentation"))
     implementation(project(":business:user:data"))
     implementation(project(":business:user:domain"))
@@ -78,6 +79,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.livedata.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.lifecycle:lifecycle-process:2.7.0")  // ProcessLifecycleOwner
     
     // Navigation
     implementation(libs.androidx.navigation.fragment.ktx)

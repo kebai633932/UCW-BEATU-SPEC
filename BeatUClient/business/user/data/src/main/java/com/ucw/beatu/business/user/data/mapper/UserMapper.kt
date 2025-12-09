@@ -1,5 +1,6 @@
 package com.ucw.beatu.business.user.data.mapper
 
+import android.util.Log
 import com.ucw.beatu.business.user.data.api.dto.UserDto
 import com.ucw.beatu.business.user.domain.model.User
 import com.ucw.beatu.shared.database.entity.UserEntity
@@ -13,13 +14,13 @@ import com.ucw.beatu.shared.database.entity.UserEntity
  */
 fun UserEntity.toDomain(): User {
     return User(
-        id = id,
+        id = userId, // ✅ 修改：使用 userId 字段
         avatarUrl = avatarUrl,
-        name = name,
+        name = userName, // ✅ 修改：使用 userName 字段
         bio = bio,
-        likesCount = likesCount,
+        likesCount = 0, // ✅ 修改：新表结构中没有 likesCount 字段
         followingCount = followingCount,
-        followersCount = followersCount
+        followersCount = followerCount // ✅ 修改：使用 followerCount 字段
     )
 }
 
@@ -28,13 +29,12 @@ fun UserEntity.toDomain(): User {
  */
 fun User.toEntity(): UserEntity {
     return UserEntity(
-        id = id,
+        userId = id, // ✅ 修改：使用 userId 字段
+        userName = name, // ✅ 修改：使用 userName 字段
         avatarUrl = avatarUrl,
-        name = name,
-        bio = bio,
-        likesCount = likesCount,
+        followerCount = followersCount, // ✅ 修改：使用 followerCount 字段
         followingCount = followingCount,
-        followersCount = followersCount
+        bio = bio
     )
 }
 
@@ -42,14 +42,19 @@ fun User.toEntity(): UserEntity {
  * UserDto -> User
  */
 fun UserDto.toDomain(): User {
+    Log.d("UserDto", "id=${id}")
+    Log.d("UserDto", "name=${name}")
+    Log.d("UserDto", "followingCount=${followingCount} (类型: ${followingCount::class.java.simpleName})")
+    Log.d("UserDto", "followersCount=${followersCount} (类型: ${followersCount::class.java.simpleName})")
+    Log.d("UserDto", "bio=${bio}")
     return User(
         id = id,
         avatarUrl = avatarUrl,
         name = name,
         bio = bio,
-        likesCount = likesCount,
         followingCount = followingCount,
-        followersCount = followersCount
+        followersCount = followersCount,
+        likesCount = likesCount
     )
 }
 

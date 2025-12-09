@@ -7,6 +7,7 @@ import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import com.ucw.beatu.business.videofeed.domain.usecase.FavoriteVideoUseCase
 import com.ucw.beatu.business.videofeed.domain.usecase.LikeVideoUseCase
+import com.ucw.beatu.business.videofeed.domain.usecase.SaveWatchHistoryUseCase
 import com.ucw.beatu.business.videofeed.domain.usecase.UnfavoriteVideoUseCase
 import com.ucw.beatu.business.videofeed.domain.usecase.ShareVideoUseCase
 import com.ucw.beatu.business.videofeed.domain.usecase.UnlikeVideoUseCase
@@ -55,7 +56,8 @@ class VideoItemViewModel @Inject constructor(
     private val unlikeVideoUseCase: UnlikeVideoUseCase,
     private val favoriteVideoUseCase: FavoriteVideoUseCase,
     private val unfavoriteVideoUseCase: UnfavoriteVideoUseCase,
-    private val shareVideoUseCase: ShareVideoUseCase
+    private val shareVideoUseCase: ShareVideoUseCase,
+    private val saveWatchHistoryUseCase: SaveWatchHistoryUseCase
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(VideoItemUiState())
@@ -184,6 +186,47 @@ class VideoItemViewModel @Inject constructor(
                             } else {
                                 android.util.Log.d("VideoItemViewModel", "onReady: 从横屏返回，位置匹配（当前=${currentPosition}ms，目标=${targetPosition}ms，差异=${positionDiff}ms）")
                             }
+                            
+                            // ✅ 修复：根据会话的 playWhenReady 状态决定是否自动播放
+                            // 从横屏返回竖屏时，如果会话中 playWhenReady=true，应该自动播放
+                            if (session.playWhenReady) {
+                                android.util.Log.d("VideoItemViewModel", "onReady: 从横屏返回，会话中 playWhenReady=true，自动恢复播放")
+                                // 等待 Surface 准备好后再播放
+                                viewModelScope.launch {
+                                    // 检查视频尺寸，如果有尺寸说明 Surface 已准备好
+                                    if (player.player.videoSize.width > 0 && player.player.videoSize.height > 0) {
+                                        android.util.Log.d("VideoItemViewModel", "onReady: Surface 已准备好，立即播放")
+                                        player.play()
+                                    } else {
+                                        // 等待首帧渲染
+                                        var surfaceReady = false
+                                        val surfaceListener = object : Player.Listener {
+                                            override fun onRenderedFirstFrame() {
+                                                if (!surfaceReady) {
+                                                    surfaceReady = true
+                                                    android.util.Log.d("VideoItemViewModel", "onReady: Surface 准备好，首帧已渲染，开始播放")
+                                                    player.player.removeListener(this)
+                                                    player.play()
+                                                }
+                                            }
+                                        }
+                                        player.player.addListener(surfaceListener)
+                                        
+                                        // 延迟检查，如果 300ms 后还没有首帧，也尝试播放
+                                        kotlinx.coroutines.delay(300)
+                                        if (!surfaceReady && player.player.videoSize.width > 0) {
+                                            surfaceReady = true
+                                            android.util.Log.d("VideoItemViewModel", "onReady: 300ms后检测到视频尺寸，开始播放")
+                                            player.player.removeListener(surfaceListener)
+                                            player.play()
+                                        }
+                                    }
+                                }
+                            } else {
+                                android.util.Log.d("VideoItemViewModel", "onReady: 从横屏返回，会话中 playWhenReady=false，保持暂停状态")
+                                player.pause()
+                            }
+                            
                             // 清除会话信息（已经使用完毕）
                             pendingSession = null
                             handoffInProgress = false
@@ -198,6 +241,19 @@ class VideoItemViewModel @Inject constructor(
                             durationMs = player.player.duration.takeIf { it > 0 } ?: _uiState.value.durationMs
                         )
                         android.util.Log.d("VideoItemViewModel", "onReady: 已更新 isPlaying=$isActuallyPlaying，当前位置=${player.player.currentPosition}ms")
+                        
+                        // ✅ 观看历史异步写入：用户点击开始观看视频时，按照文档的异步写入数据库，上传远程
+                        // 策略B：不回滚（弱一致性数据，自动重试同步）
+                        val currentPosition = player.player.currentPosition
+                        viewModelScope.launch {
+                            try {
+                                saveWatchHistoryUseCase(videoId, currentPosition)
+                                android.util.Log.d("VideoItemViewModel", "保存观看历史: videoId=$videoId, position=$currentPosition")
+                            } catch (e: Exception) {
+                                android.util.Log.e("VideoItemViewModel", "保存观看历史失败: videoId=$videoId", e)
+                                // 策略B：不回滚，保留待同步状态，下次启动时继续重试
+                            }
+                        }
                     }
 
                     override fun onError(videoId: Long, throwable: Throwable) {  // ✅ 修改：从 String 改为 Long
@@ -863,6 +919,15 @@ class VideoItemViewModel @Inject constructor(
                 is AppResult.Loading -> _uiState.value
             }
         }
+    }
+
+    /**
+     * 设置播放倍速
+     */
+    fun setSpeed(speed: Float) {
+        currentPlayer?.setSpeed(speed)
+        _uiState.value = _uiState.value.copy(currentSpeed = speed)
+        android.util.Log.d("VideoItemViewModel", "setSpeed: 设置倍速=$speed")
     }
 
     /**
